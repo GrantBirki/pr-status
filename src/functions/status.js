@@ -100,8 +100,9 @@ export async function status(octokit, context, prNumber, data) {
   }
 
   return {
-    review_decision: result.repository.pullRequest.reviewDecision,
-    merge_state_status: result.repository.pullRequest.mergeStateStatus,
+    review_decision: result?.repository?.pullRequest?.reviewDecision,
+    total_approvals: result?.repository?.pullRequest?.reviews?.totalCount,
+    merge_state_status: result?.repository?.pullRequest?.mergeStateStatus,
     commit_status: commitStatus
   }
 }
