@@ -1,0 +1,18 @@
+name: "approved"
+description: "A GitHub Action that checks if a pull request is in a fully approved state"
+author: "Grant Birkinbine"
+branding:
+  icon: 'check'
+  color: 'green'
+inputs:
+  github_token:
+    description: The GitHub token used to create an authenticated client - Provided for you by default!
+    default: ${{ github.token }}
+    required: true
+outputs:
+  approved:
+    description: 'The string "true" if the pull request is in a fully approved state, "false" otherwise'
+runs:
+  using: "node20"
+  main: "dist/index.js"
+  post: "dist/index.js"
