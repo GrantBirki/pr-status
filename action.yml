@@ -20,6 +20,12 @@ inputs:
 outputs:
   approved:
     description: 'The string "true" if the pull request is in a fully approved state, "false" otherwise'
+  review_decision:
+    description: 'The decision of the pull request review status - Examples: "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", `null`, etc'
+  merge_state_status:
+    description: 'The status of the pull request merge state - Examples: "CLEAN", "DIRTY", "UNKNOWN", "DRAFT", etc'
+  commit_status:
+    description: 'The ci status for the latest commit on the pull request - Examples: "SUCCESS", "FAILURE", "PENDING", `null`, etc'
 runs:
   using: "node20"
   main: "dist/index.js"

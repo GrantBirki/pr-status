@@ -28,6 +28,14 @@ export async function run() {
     // Get the status of the pull request
     const statusResult = await status(octokit, context, prNumber, data)
 
+    // set the outputs
+    core.setOutput('review_decision', statusResult.review_decision)
+    core.setOutput('merge_state_status', statusResult.merge_state_status)
+    core.setOutput('commit_status', statusResult.commit_status)
+    if (statusResult.review_decision === 'APPROVED') {
+      core.setOutput('approved', 'true')
+    }
+
     core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)
 
     return 'success'
