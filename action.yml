@@ -14,9 +14,13 @@ inputs:
     default: ${{ github.event.number }}
     required: true
   checks:
-    description: Whether to only look for `required` ci checks or `all` ci checks on the pull request.
+    description: Whether to only look for `required` ci checks or `all` ci checks on the pull request
     default: all
     required: true
+  evaluations:
+    description: The attributes to evaluate the pull request against when determining its status on a PASS/FAIL system. This plays into the `evaluation` output
+    default: 'approved,ci_passing,mergeable' # this says that the pull request must be approved, have passing ci, and be mergeable
+    required: false
 outputs:
   approved:
     description: 'The string "true" if the pull request is in a fully approved state, "false" otherwise'
@@ -28,6 +32,8 @@ outputs:
     description: 'The status of the pull request merge state - Examples: "CLEAN", "DIRTY", "UNKNOWN", "DRAFT", "BLOCKED", etc'
   commit_status:
     description: 'The ci status for the latest commit on the pull request - Examples: "SUCCESS", "FAILURE", "PENDING", `null`, etc'
+  evaluation:
+    description: 'The overall evaluation of the pull request based on the evaluations input - Examples: "PASS", "FAIL"'
 runs:
   using: "node20"
   main: "dist/index.js"
