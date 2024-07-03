@@ -1,5 +1,5 @@
-name: "approved"
-description: "A GitHub Action that checks if a pull request is in a fully approved state"
+name: "status"
+description: "A GitHub Action that checks the status of a pull request"
 author: "Grant Birkinbine"
 branding:
   icon: 'check'

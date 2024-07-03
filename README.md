@@ -1,8 +1,8 @@
-# approved ✅
+# status ✅
 
 [![coverage](./badges/coverage.svg)](./badges/coverage.svg)
 
-A GitHub Action that checks if a pull request is in a fully approved state.
+A GitHub Action that checks the status of a pull request.
 
 ## Inputs 📥
 

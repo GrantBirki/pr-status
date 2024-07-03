@@ -1,8 +1,8 @@
 {
-  "name": "approved-action",
+  "name": "status",
   "version": "0.0.0",
   "private": true,
-  "description": "A GitHub Action that checks if a pull request is in a fully approved state",
+  "description": "A GitHub Action that checks the status of a pull request",
   "main": "lib/main.js",
   "scripts": {
     "format": "prettier --write '**/*.js'",
@@ -16,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/grantbirki/approved.git"
+    "url": "git+https://github.com/grantbirki/status.git"
   },
   "keywords": [
     "actions",
