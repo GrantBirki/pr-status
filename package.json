@@ -1,5 +1,5 @@
 {
-  "name": "status",
+  "name": "pr-status",
   "version": "0.0.0",
   "private": true,
   "description": "A GitHub Action that checks the status of a pull request",
@@ -16,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/grantbirki/status.git"
+    "url": "git+https://github.com/grantbirki/pr-status.git"
   },
   "keywords": [
     "actions",

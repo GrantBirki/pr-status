@@ -1,4 +1,4 @@
-name: "status"
+name: "pr-status"
 description: "A GitHub Action that checks the status of a pull request"
 author: "Grant Birkinbine"
 branding:
