@@ -9,6 +9,14 @@ inputs:
     description: The GitHub token used to create an authenticated client - Provided for you by default!
     default: ${{ github.token }}
     required: true
+  pr_number:
+    description: The number of the pull request to check the status of
+    default: ${{ github.event.number }}
+    required: true
+  checks:
+    description: Whether to only look for `required` ci checks or `all` ci checks on the pull request.
+    default: all
+    required: true
 outputs:
   approved:
     description: 'The string "true" if the pull request is in a fully approved state, "false" otherwise'

@@ -5,8 +5,9 @@ import {COLORS} from './colors'
 // :param octokit: The octokit client
 // :param context: The GitHub Actions event context
 // :param prNumber: The pull request number
-// :param checks: The type of checks to consider ('all' or 'required') (String)
-export async function status(octokit, context, prNumber, checks = 'all') {
+// :param data: An object containing the checks parameter and other data
+// :return: An object containing the review_decision, merge_state_status, and commit_status
+export async function status(octokit, context, prNumber, data) {
   const query = `query($owner:String!, $name:String!, $number:Int!) {
     repository(owner:$owner, name:$name) {
         pullRequest(number:$number) {
@@ -61,7 +62,7 @@ export async function status(octokit, context, prNumber, checks = 'all') {
       commitStatus = null
 
       // If only the required checks need to pass
-    } else if (checks === 'required') {
+    } else if (data.checks === 'required') {
       commitStatus =
         result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes
           .filter(x => x.isRequired)
