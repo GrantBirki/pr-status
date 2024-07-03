@@ -25,7 +25,7 @@ outputs:
   review_decision:
     description: 'The decision of the pull request review status - Examples: "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", `null`, etc'
   merge_state_status:
-    description: 'The status of the pull request merge state - Examples: "CLEAN", "DIRTY", "UNKNOWN", "DRAFT", etc'
+    description: 'The status of the pull request merge state - Examples: "CLEAN", "DIRTY", "UNKNOWN", "DRAFT", "BLOCKED", etc'
   commit_status:
     description: 'The ci status for the latest commit on the pull request - Examples: "SUCCESS", "FAILURE", "PENDING", `null`, etc'
 runs:
