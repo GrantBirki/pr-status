@@ -20,6 +20,8 @@ inputs:
 outputs:
   approved:
     description: 'The string "true" if the pull request is in a fully approved state, "false" otherwise'
+  total_approvals:
+    description: 'The total number of approvals on the pull request'
   review_decision:
     description: 'The decision of the pull request review status - Examples: "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", `null`, etc'
   merge_state_status:

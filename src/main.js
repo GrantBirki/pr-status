@@ -30,6 +30,7 @@ export async function run() {
 
     // set the outputs
     core.setOutput('review_decision', statusResult.review_decision)
+    core.setOutput('total_approvals', statusResult.total_approvals)
     core.setOutput('merge_state_status', statusResult.merge_state_status)
     core.setOutput('commit_status', statusResult.commit_status)
     if (statusResult.review_decision === 'APPROVED') {
