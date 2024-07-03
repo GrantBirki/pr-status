@@ -99,10 +99,14 @@ export async function status(octokit, context, prNumber, data) {
     }
   }
 
-  return {
+  const statusResult = {
     review_decision: result?.repository?.pullRequest?.reviewDecision,
     total_approvals: result?.repository?.pullRequest?.reviews?.totalCount,
     merge_state_status: result?.repository?.pullRequest?.mergeStateStatus,
     commit_status: commitStatus
   }
+
+  core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)
+
+  return statusResult
 }

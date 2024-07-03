@@ -32887,15 +32887,41 @@ async function status_status(octokit, context, prNumber, data) {
     }
   }
 
-  return {
+  const statusResult = {
     review_decision: result?.repository?.pullRequest?.reviewDecision,
     total_approvals: result?.repository?.pullRequest?.reviews?.totalCount,
     merge_state_status: result?.repository?.pullRequest?.mergeStateStatus,
     commit_status: commitStatus
   }
+
+  core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)
+
+  return statusResult
+}
+
+;// CONCATENATED MODULE: ./src/functions/outputs.js
+
+
+// Helper function for setting GitHub Actions outputs
+// :param statusResult: The object containing the relevant status information
+// :return: nothing
+function outputs(statusResult) {
+  // set the outputs
+  core.setOutput('review_decision', statusResult.review_decision)
+  core.setOutput('total_approvals', statusResult.total_approvals)
+  core.setOutput('merge_state_status', statusResult.merge_state_status)
+  core.setOutput('commit_status', statusResult.commit_status)
+
+  // set the approved output
+  if (statusResult.review_decision === 'APPROVED') {
+    core.setOutput('approved', 'true')
+  } else {
+    core.setOutput('approved', 'false')
+  }
 }
 
 ;// CONCATENATED MODULE: ./src/main.js
+
 
 
 
@@ -32907,6 +32933,8 @@ async function status_status(octokit, context, prNumber, data) {
 async function run() {
   try {
     core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
+
+    // Get the inputs
     const token = core.getInput('github_token', {required: true})
     const checks = core.getInput('checks', {required: true})
     const prNumber = core.getInput('pr_number', {required: true})
@@ -32920,22 +32948,15 @@ async function run() {
     core.debug(`context: ${JSON.stringify(github.context, null, 2)}`)
 
     const data = {
-      checks: checks
+      checks: checks,
+      prNumber: prNumber
     }
 
     // Get the status of the pull request
     const statusResult = await status_status(octokit, github.context, prNumber, data)
 
-    // set the outputs
-    core.setOutput('review_decision', statusResult.review_decision)
-    core.setOutput('total_approvals', statusResult.total_approvals)
-    core.setOutput('merge_state_status', statusResult.merge_state_status)
-    core.setOutput('commit_status', statusResult.commit_status)
-    if (statusResult.review_decision === 'APPROVED') {
-      core.setOutput('approved', 'true')
-    }
-
-    core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)
+    // Set the outputs
+    outputs(statusResult)
 
     return 'success'
   } catch (error) {
