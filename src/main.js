@@ -26,12 +26,7 @@ export async function run() {
     }
 
     // Get the status of the pull request
-    const statusResult = await status(
-      octokit,
-      context,
-      prNumber,
-      data
-    )
+    const statusResult = await status(octokit, context, prNumber, data)
 
     core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)
 

@@ -32650,7 +32650,7 @@ var dist_bundle_namespaceObject = {};
 __nccwpck_require__.r(dist_bundle_namespaceObject);
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
-var lib_core = __nccwpck_require__(2186);
+var core = __nccwpck_require__(2186);
 // EXTERNAL MODULE: ./node_modules/@actions/github/lib/github.js
 var github = __nccwpck_require__(5438);
 // EXTERNAL MODULE: ./node_modules/bottleneck/light.js
@@ -32785,40 +32785,112 @@ const COLORS = {
   reset: '\u001b[0m' // reset
 }
 
-;// CONCATENATED MODULE: ./src/functions/string-to-array.js
+;// CONCATENATED MODULE: ./src/functions/status.js
 
 
-// Helper function to convert a String to an Array specifically in Actions
-// :param string: A comma seperated string to convert to an array
-// :return Array: The function returns an Array - can be empty
-function stringToArray(string) {
+
+// Helper function to get the status of a pull request from multiple perspectives
+// :param octokit: The octokit client
+// :param context: The GitHub Actions event context
+// :param prNumber: The pull request number
+// :param data: An object containing the checks parameter and other data
+// :return: An object containing the review_decision, merge_state_status, and commit_status
+async function status_status(octokit, context, prNumber, data) {
+  const query = `query($owner:String!, $name:String!, $number:Int!) {
+    repository(owner:$owner, name:$name) {
+        pullRequest(number:$number) {
+            reviewDecision
+            mergeStateStatus
+            commits(last: 1) {
+                nodes {
+                    commit {
+                        checkSuites {
+                          totalCount
+                        }
+                        statusCheckRollup {
+                            state
+                            contexts(first:100) {
+                                nodes {
+                                    ... on CheckRun {
+                                        isRequired(pullRequestNumber:$number)
+                                        conclusion
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            reviews(states: APPROVED) {
+                totalCount
+            }
+        }
+    }
+}`
+  // Note: https://docs.github.com/en/graphql/overview/schema-previews#merge-info-preview (mergeStateStatus)
+  const variables = {
+    owner: context.repo.owner,
+    name: context.repo.repo,
+    number: parseInt(prNumber),
+    headers: {
+      Accept: 'application/vnd.github.merge-info-preview+json'
+    }
+  }
+  // Make the GraphQL query
+  const result = await octokit.graphql(query, variables)
+
+  var commitStatus = null
   try {
-    // If the String is empty, return an empty Array
-    if (string.trim() === '') {
+    // If there are no CI checks defined at all, we can set the commitStatus to null
+    if (
+      result.repository.pullRequest.commits.nodes[0].commit.checkSuites
+        .totalCount === 0
+    ) {
+      core.info('💡 no CI checks have been defined for this pull request')
+      commitStatus = null
+
+      // If only the required checks need to pass
+    } else if (data.checks === 'required') {
+      commitStatus =
+        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes
+          .filter(x => x.isRequired)
+          .reduce(
+            (acc, x) => acc && ['SUCCESS', 'SKIPPED'].includes(x.conclusion),
+            true
+          )
+          ? 'SUCCESS'
+          : 'FAILURE'
+
+      // If there are CI checked defined, we need to check for the 'state' of the latest commit
+    } else {
+      commitStatus =
+        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+          .state
+    }
+  } catch (e) {
+    core.debug(
+      `could not retrieve PR commit status: ${e} - Handled: ${COLORS.success}OK`
+    )
+    core.debug('this repo may not have any CI checks defined')
+    core.debug('skipping commit status check and proceeding...')
+    commitStatus = null
+
+    // Try to display the raw GraphQL result for debugging purposes
+    try {
+      core.debug('raw graphql result for debugging:')
+      core.debug(result)
+    } catch {
+      // istanbul ignore next
       core.debug(
-        'in stringToArray(), an empty String was found so an empty Array was returned'
+        'Could not output raw graphql result for debugging - This is bad'
       )
-      return []
     }
+  }
 
-    // Split up the String on commas, trim each element, and return the Array
-    const stringArray = string.split(',').map(target => target.trim())
-    var results = []
-
-    // filter out empty items
-    for (const item of stringArray) {
-      if (item === '') {
-        continue
-      }
-      results.push(item)
-    }
-
-    return results
-  } catch (error) {
-    /* istanbul ignore next */
-    core.error(`failed string for debugging purposes: ${string}`)
-    /* istanbul ignore next */
-    throw new Error(`could not convert String to Array - error: ${error}`)
+  return {
+    review_decision: result.repository.pullRequest.reviewDecision,
+    merge_state_status: result.repository.pullRequest.mergeStateStatus,
+    commit_status: commitStatus
   }
 }
 
@@ -32829,22 +32901,36 @@ function stringToArray(string) {
 
 
 
+// import {stringToArray} from './functions/string-to-array'
 
 async function run() {
   try {
-    lib_core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
-    // Get the inputs for the branch-deploy Action
-    const token = lib_core.getInput('github_token', {required: true})
+    core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
+    const token = core.getInput('github_token', {required: true})
+    const checks = core.getInput('checks', {required: true})
+    const prNumber = core.getInput('pr_number', {required: true})
 
     // Create an octokit client with the retry plugin
     const octokit = github.getOctokit(token, {
       additionalPlugins: [dist_bundle_namespaceObject.octokitRetry]
     })
 
+    // for debugging, dump the context object
+    core.debug(`context: ${JSON.stringify(github.context, null, 2)}`)
+
+    const data = {
+      checks: checks
+    }
+
+    // Get the status of the pull request
+    const statusResult = await status_status(octokit, github.context, prNumber, data)
+
+    core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)
+
     return 'success'
   } catch (error) {
-    lib_core.error(error.stack)
-    lib_core.setFailed(error.message)
+    core.error(error.stack)
+    core.setFailed(error.message)
   }
 }
 
