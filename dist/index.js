@@ -33100,10 +33100,10 @@ async function run() {
       core.getInput('evaluations', {required: true})
     )
     const passLabels = stringToArray(
-      core.getInput('pass_labels', {required: true})
+      core.getInput('pass_labels', {required: false})
     )
     const failLabels = stringToArray(
-      core.getInput('fail_labels', {required: true})
+      core.getInput('fail_labels', {required: false})
     )
 
     // create an octokit client with the retry plugin
