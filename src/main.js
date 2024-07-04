@@ -6,6 +6,7 @@ import {COLORS} from './functions/colors'
 import {status} from './functions/status'
 import {outputs} from './functions/outputs'
 import {stringToArray} from './functions/string-to-array'
+import {label} from './functions/label'
 
 export async function run() {
   try {
@@ -17,6 +18,12 @@ export async function run() {
     const prNumber = core.getInput('pr_number', {required: true})
     const evaluations = stringToArray(
       core.getInput('evaluations', {required: true})
+    )
+    const passLabels = stringToArray(
+      core.getInput('pass_labels', {required: true})
+    )
+    const failLabels = stringToArray(
+      core.getInput('fail_labels', {required: true})
     )
 
     // create an octokit client with the retry plugin
@@ -37,7 +44,14 @@ export async function run() {
     const statusResult = await status(octokit, context, prNumber, data)
 
     // set the outputs
-    outputs(statusResult, data)
+    const pass = outputs(statusResult, data)
+
+    // conditionally set the labels to add or remove
+    if (pass === true) {
+      await label(context, octokit, passLabels, failLabels)
+    } else {
+      await label(context, octokit, failLabels, passLabels)
+    }
 
     return 'success'
   } catch (error) {
