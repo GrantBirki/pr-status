@@ -32916,6 +32916,11 @@ function outputs(status, data) {
   // set the approved output depending on the review decision
   if (status.review_decision === 'APPROVED') {
     core.setOutput('approved', 'true')
+  } else if (status.review_decision === null) {
+    core.info(
+      'PR has no approval requirements so it is technically considered approved'
+    )
+    core.setOutput('approved', 'true')
   } else {
     core.setOutput('approved', 'false')
   }
