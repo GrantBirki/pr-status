@@ -32928,7 +32928,7 @@ function outputs(status, data) {
   // set the evaluation output depending on the input criteria
   // if no evaluations were provided, set the output to null
   if (data.evaluations.length === 0) {
-    core.setOutput('evaluations', null)
+    core.setOutput('evaluation', null)
   }
 
   // iterate over all the evaluations and check them

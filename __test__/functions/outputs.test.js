@@ -86,6 +86,41 @@ describe('outputs function', () => {
     )
   })
 
+  test('should handle PRs where changes have been requested', () => {
+    const status = {
+      review_decision: 'CHANGES_REQUESTED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS'
+    }
+    const data = {
+      evaluations: ['approved']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('approved', 'false')
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('PR is not approved')
+    )
+  })
+
+  test('should handle situations where no evaluations are provided', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS'
+    }
+    const data = {
+      evaluations: []
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
+    expect(core.debug).toHaveBeenCalledWith(expect.stringContaining('PASS'))
+  })
+
   test('should handle unknown evaluation criteria', () => {
     const status = {
       review_decision: 'APPROVED',
