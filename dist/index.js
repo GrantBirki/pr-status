@@ -32903,20 +32903,98 @@ async function status_status(octokit, context, prNumber, data) {
 
 
 // Helper function for setting GitHub Actions outputs
-// :param statusResult: The object containing the relevant status information
+// :param status: The object containing the relevant status information
+// :param data: The object containing the relevant data information
 // :return: nothing
-function outputs(statusResult) {
+function outputs(status, data) {
   // set the outputs
-  core.setOutput('review_decision', statusResult.review_decision || null)
-  core.setOutput('total_approvals', statusResult.total_approvals || 0)
-  core.setOutput('merge_state_status', statusResult.merge_state_status || null)
-  core.setOutput('commit_status', statusResult.commit_status || null)
+  core.setOutput('review_decision', status.review_decision || null)
+  core.setOutput('total_approvals', status.total_approvals || 0)
+  core.setOutput('merge_state_status', status.merge_state_status || null)
+  core.setOutput('commit_status', status.commit_status || null)
 
   // set the approved output depending on the review decision
-  if (statusResult.review_decision === 'APPROVED') {
+  if (status.review_decision === 'APPROVED') {
     core.setOutput('approved', 'true')
   } else {
     core.setOutput('approved', 'false')
+  }
+
+  // set the evaluation output depending on the input criteria
+  // if no evaluations were provided, set the output to null
+  if (data.evaluations.length === 0) {
+    core.setOutput('evaluations', null)
+  }
+
+  // iterate over all the evaluations and check them
+  var pass = true
+  data.evaluations.forEach(evaluation => {
+    if (evaluation === 'approved') {
+      if (status.review_decision !== 'APPROVED') {
+        core.debug(`evaluation '${evaluation}' failed - PR is not approved`)
+        pass = false
+      }
+    } else if (evaluation === 'mergeable') {
+      if (status.merge_state_status !== 'CLEAN') {
+        core.debug(
+          `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
+        )
+        pass = false
+      }
+    } else if (evaluation === 'ci_passing') {
+      if (status.commit_status !== 'SUCCESS' || status.commit_status === null) {
+        core.debug(
+          `evaluation '${evaluation}' failed - commit status is not successful`
+        )
+        pass = false
+      }
+    } else {
+      core.debug(
+        `evaluation '${evaluation}' failed - unknown evaluation criteria`
+      )
+      pass = false
+    }
+  })
+
+  core.setOutput('evaluation', pass ? 'PASS' : 'FAIL')
+
+  return pass
+}
+
+;// CONCATENATED MODULE: ./src/functions/string-to-array.js
+
+
+// Helper function to convert a String to an Array specifically in Actions
+// :param string: A comma seperated string to convert to an array
+// :return Array: The function returns an Array - can be empty
+function stringToArray(string) {
+  try {
+    // If the String is empty, return an empty Array
+    if (string.trim() === '') {
+      core.debug(
+        'in stringToArray(), an empty String was found so an empty Array was returned'
+      )
+      return []
+    }
+
+    // Split up the String on commas, trim each element, and return the Array
+    const stringArray = string.split(',').map(target => target.trim())
+    var results = []
+
+    // filter out empty items
+    for (const item of stringArray) {
+      if (item === '') {
+        continue
+      }
+      results.push(item)
+    }
+
+    return results
+  } catch (error) {
+    /* istanbul ignore next */
+    core.error(`failed string for debugging purposes: ${string}`)
+    /* istanbul ignore next */
+    throw new Error(`could not convert String to Array - error: ${error}`)
   }
 }
 
@@ -32928,18 +33006,21 @@ function outputs(statusResult) {
 
 
 
-// import {stringToArray} from './functions/string-to-array'
+
 
 async function run() {
   try {
     core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
 
-    // Get the inputs
+    // get the inputs
     const token = core.getInput('github_token', {required: true})
     const checks = core.getInput('checks', {required: true})
     const prNumber = core.getInput('pr_number', {required: true})
+    const evaluations = stringToArray(
+      core.getInput('evaluations', {required: true})
+    )
 
-    // Create an octokit client with the retry plugin
+    // create an octokit client with the retry plugin
     const octokit = github.getOctokit(token, {
       additionalPlugins: [dist_bundle_namespaceObject.octokitRetry]
     })
@@ -32949,14 +33030,15 @@ async function run() {
 
     const data = {
       checks: checks,
-      prNumber: prNumber
+      prNumber: prNumber,
+      evaluations: evaluations
     }
 
-    // Get the status of the pull request
+    // get the status of the pull request
     const statusResult = await status_status(octokit, github.context, prNumber, data)
 
-    // Set the outputs
-    outputs(statusResult)
+    // set the outputs
+    outputs(statusResult, data)
 
     return 'success'
   } catch (error) {
