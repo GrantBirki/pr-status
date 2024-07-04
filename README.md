@@ -1,5 +1,9 @@
 # pr-status ✅
 
+[![test](https://github.com/GrantBirki/pr-status/actions/workflows/test.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/test.yml)
+[![package-check](https://github.com/GrantBirki/pr-status/actions/workflows/package-check.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/package-check.yml)
+[![lint](https://github.com/GrantBirki/pr-status/actions/workflows/lint.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/lint.yml)
+[![CodeQL](https://github.com/GrantBirki/pr-status/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/codeql-analysis.yml)
 [![coverage](./badges/coverage.svg)](./badges/coverage.svg)
 
 A GitHub Action that checks the status of a pull request.
