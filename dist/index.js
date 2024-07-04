@@ -32930,7 +32930,10 @@ function outputs(status, data) {
   var pass = true
   data.evaluations.forEach(evaluation => {
     if (evaluation === 'approved') {
-      if (status.review_decision !== 'APPROVED') {
+      if (
+        status.review_decision !== 'APPROVED' ||
+        status.review_decision === null
+      ) {
         core.debug(`evaluation '${evaluation}' failed - PR is not approved`)
         pass = false
       }
