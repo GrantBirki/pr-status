@@ -58,7 +58,7 @@ export function outputs(status, data) {
   })
 
   core.setOutput('evaluation', pass ? 'PASS' : 'FAIL')
-  core.info(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
+  core.debug(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass
 }
