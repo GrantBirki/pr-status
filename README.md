@@ -4,6 +4,8 @@
 
 A GitHub Action that checks the status of a pull request.
 
+⚠️ under construction ⚠️
+
 ## Inputs 📥
 
 | Input | Required? | Default | Description |
@@ -12,8 +14,8 @@ A GitHub Action that checks the status of a pull request.
 | `pr_number` | `true` | `${{ github.event.number }}` | The pull request number to check the status of |
 | `checks` | `true` | `all` | Whether to only look for `required` ci checks or `all` ci checks on the pull request |
 | `evaluations` | `false` | `approved,ci_passing,mergeable` | The attributes to evaluate the pull request against when determining its status on a PASS/FAIL system. This plays into the `evaluation` output. |
-| `pass_labels` | `false` | `""` | An optional list of labels to apply to the pull request if the evaluation passes |
-| `fail_labels` | `false` | `""` | An optional list of labels to apply to the pull request if the evaluation fails |
+| `pass_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation passes - Examples: `"ready-for-deployment,approved"` |
+| `fail_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation fails - Examples: `"needs-help,ci-failing,needs-review"` |
 
 ## Outputs 📤
 
