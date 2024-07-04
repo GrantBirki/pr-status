@@ -29,8 +29,8 @@ export function outputs(status, data) {
   data.evaluations.forEach(evaluation => {
     if (evaluation === 'approved') {
       if (
-        status.review_decision !== 'APPROVED' ||
-        status.review_decision === null
+        status.review_decision !== 'APPROVED' &&
+        status.review_decision !== null
       ) {
         core.debug(`evaluation '${evaluation}' failed - PR is not approved`)
         pass = false
@@ -43,7 +43,7 @@ export function outputs(status, data) {
         pass = false
       }
     } else if (evaluation === 'ci_passing') {
-      if (status.commit_status !== 'SUCCESS' || status.commit_status === null) {
+      if (status.commit_status !== 'SUCCESS' && status.commit_status !== null) {
         core.debug(
           `evaluation '${evaluation}' failed - commit status is not successful`
         )
