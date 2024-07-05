@@ -32888,10 +32888,12 @@ async function status_status(octokit, context, prNumber, data) {
   }
 
   const statusResult = {
-    review_decision: result?.repository?.pullRequest?.reviewDecision,
-    total_approvals: result?.repository?.pullRequest?.reviews?.totalCount,
-    merge_state_status: result?.repository?.pullRequest?.mergeStateStatus,
-    commit_status: commitStatus
+    review_decision: result?.repository?.pullRequest?.reviewDecision || null,
+    total_approvals:
+      result?.repository?.pullRequest?.reviews?.totalCount || null,
+    merge_state_status:
+      result?.repository?.pullRequest?.mergeStateStatus || null,
+    commit_status: commitStatus || null
   }
 
   core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)

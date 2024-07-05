@@ -197,4 +197,54 @@ describe('status function', () => {
       commit_status: 'FAILURE'
     })
   })
+
+  test('should successfully get the status of a PR that has no defined approvals or CI checks', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: null,
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 0
+                  },
+                  statusCheckRollup: null
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    expect(await status(octokit, context, prNumber, data)).toStrictEqual({
+      review_decision: null,
+      merge_state_status: null,
+      total_approvals: null,
+      commit_status: null
+    })
+  })
+
+  test('should successfully get the status of a PR that has no defined CI checks but has approvals', async () => {
+    octokit.graphql = jest.fn().mockReturnValueOnce({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          }
+        }
+      }
+    })
+
+    expect(await status(octokit, context, prNumber, data)).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: null
+    })
+  })
 })
