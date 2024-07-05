@@ -8,8 +8,6 @@
 
 A GitHub Action that checks the status of a pull request.
 
-⚠️ under construction ⚠️
-
 ## Inputs 📥
 
 | Input | Required? | Default | Description |
