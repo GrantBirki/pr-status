@@ -87,6 +87,8 @@ describe('status function', () => {
       commit_status: 'SUCCESS'
     })
 
-    expect(core.debug).toHaveBeenCalledWith(expect.stringContaining('statusResult:'))
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('statusResult:')
+    )
   })
 })
