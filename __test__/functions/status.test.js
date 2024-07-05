@@ -144,4 +144,57 @@ describe('status function', () => {
       commit_status: 'SUCCESS'
     })
   })
+
+  test('should successfully get the status of a PR that is approved and in a cleanly mergeable state but only required CI checks are evaluated but the required CI checks are failing', async () => {
+    data.checks = 'required'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'BLOCKED',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'FAILURE',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'FAILURE'
+                        },
+                        {
+                          isRequired: true,
+                          conclusion: 'SKIPPED'
+                        },
+                        {
+                          isRequired: false,
+                          conclusion: 'SUCCESS'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    expect(await status(octokit, context, prNumber, data)).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'BLOCKED',
+      total_approvals: 1,
+      commit_status: 'FAILURE'
+    })
+  })
 })
