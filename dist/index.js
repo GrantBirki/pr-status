@@ -33103,7 +33103,6 @@ async function run() {
     // get the inputs
     const token = core.getInput('github_token', {required: true})
     const checks = core.getInput('checks', {required: true})
-    const prNumber = core.getInput('pr_number', {required: true})
     const evaluations = stringToArray(
       core.getInput('evaluations', {required: true})
     )
@@ -33113,6 +33112,15 @@ async function run() {
     const failLabels = stringToArray(
       core.getInput('fail_labels', {required: false})
     )
+    const prNumber =
+      core.getInput('pr_number', {required: false}) ||
+      github.context.issue.number ||
+      github.context.payload.pull_request.number
+    if (!prNumber) {
+      throw new Error(
+        'pull request number not found in context or inputs, exiting'
+      )
+    }
 
     // create an octokit client with the retry plugin
     const octokit = github.getOctokit(token, {
