@@ -12,6 +12,9 @@ export async function run() {
   try {
     core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
 
+    // for debugging, dump the context object
+    core.debug(`context: ${JSON.stringify(context, null, 2)}`)
+
     // get the inputs
     const token = core.getInput('github_token', {required: true})
     const checks = core.getInput('checks', {required: true})
@@ -30,9 +33,6 @@ export async function run() {
     const octokit = github.getOctokit(token, {
       additionalPlugins: [octokitRetry]
     })
-
-    // for debugging, dump the context object
-    core.debug(`context: ${JSON.stringify(context, null, 2)}`)
 
     const data = {
       checks: checks,
