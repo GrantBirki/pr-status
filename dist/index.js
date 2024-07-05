@@ -32903,20 +32903,182 @@ async function status_status(octokit, context, prNumber, data) {
 
 
 // Helper function for setting GitHub Actions outputs
-// :param statusResult: The object containing the relevant status information
+// :param status: The object containing the relevant status information
+// :param data: The object containing the relevant data information
 // :return: nothing
-function outputs(statusResult) {
+function outputs(status, data) {
   // set the outputs
-  core.setOutput('review_decision', statusResult.review_decision || null)
-  core.setOutput('total_approvals', statusResult.total_approvals || 0)
-  core.setOutput('merge_state_status', statusResult.merge_state_status || null)
-  core.setOutput('commit_status', statusResult.commit_status || null)
+  core.setOutput('review_decision', status.review_decision || null)
+  core.setOutput('total_approvals', status.total_approvals || 0)
+  core.setOutput('merge_state_status', status.merge_state_status || null)
+  core.setOutput('commit_status', status.commit_status || null)
 
   // set the approved output depending on the review decision
-  if (statusResult.review_decision === 'APPROVED') {
+  if (status.review_decision === 'APPROVED') {
+    core.setOutput('approved', 'true')
+  } else if (status.review_decision === null) {
+    core.info(
+      'PR has no approval requirements so it is technically considered approved'
+    )
     core.setOutput('approved', 'true')
   } else {
     core.setOutput('approved', 'false')
+  }
+
+  // set the evaluation output depending on the input criteria
+  // if no evaluations were provided, set the output to null
+  if (data.evaluations.length === 0) {
+    core.setOutput('evaluation', null)
+  }
+
+  // iterate over all the evaluations and check them
+  var pass = true
+  data.evaluations.forEach(evaluation => {
+    if (evaluation === 'approved') {
+      if (
+        status.review_decision !== 'APPROVED' &&
+        status.review_decision !== null
+      ) {
+        core.debug(`evaluation '${evaluation}' failed - PR is not approved`)
+        pass = false
+      }
+    } else if (evaluation === 'mergeable') {
+      if (status.merge_state_status !== 'CLEAN') {
+        core.debug(
+          `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
+        )
+        pass = false
+      }
+    } else if (evaluation === 'ci_passing') {
+      if (status.commit_status !== 'SUCCESS' && status.commit_status !== null) {
+        core.debug(
+          `evaluation '${evaluation}' failed - commit status is not successful`
+        )
+        pass = false
+      }
+    } else {
+      core.debug(
+        `evaluation '${evaluation}' failed - unknown evaluation criteria`
+      )
+      pass = false
+    }
+  })
+
+  core.setOutput('evaluation', pass ? 'PASS' : 'FAIL')
+  core.debug(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
+
+  return pass
+}
+
+;// CONCATENATED MODULE: ./src/functions/string-to-array.js
+
+
+// Helper function to convert a String to an Array specifically in Actions
+// :param string: A comma seperated string to convert to an array
+// :return Array: The function returns an Array - can be empty
+function stringToArray(string) {
+  try {
+    // If the String is empty, return an empty Array
+    if (string.trim() === '') {
+      core.debug(
+        'in stringToArray(), an empty String was found so an empty Array was returned'
+      )
+      return []
+    }
+
+    // Split up the String on commas, trim each element, and return the Array
+    const stringArray = string.split(',').map(target => target.trim())
+    var results = []
+
+    // filter out empty items
+    for (const item of stringArray) {
+      if (item === '') {
+        continue
+      }
+      results.push(item)
+    }
+
+    return results
+  } catch (error) {
+    /* istanbul ignore next */
+    core.error(`failed string for debugging purposes: ${string}`)
+    /* istanbul ignore next */
+    throw new Error(`could not convert String to Array - error: ${error}`)
+  }
+}
+
+;// CONCATENATED MODULE: ./src/functions/label.js
+
+
+// Helper function to add labels to a pull request
+// :param context: The GitHub Actions event context
+// :param octokit: The octokit client
+// :param labelsToAdd: An array of labels to add to the pull request (Array)
+// :parm labelsToRemove: An array of labels to remove from the pull request (Array)
+// :returns: An object containing the labels added and removed (Object)
+async function label(context, octokit, labelsToAdd, labelsToRemove) {
+  // Get the owner, repo, and issue number from the context
+  const {owner, repo} = context.repo
+  const issueNumber = context.issue.number
+  var addedLabels = []
+  var removedLabels = []
+
+  // exit early if there are no labels to add or remove
+  if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
+    core.debug('🏷️ no labels to add or remove')
+    return {
+      added: [],
+      removed: []
+    }
+  }
+
+  // first, find and cleanup labelsToRemove if any are provided
+  if (labelsToRemove.length > 0) {
+    // Fetch current labels on the issue
+    core.debug('fetching current labels on the issue')
+    const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
+      owner: owner,
+      repo: repo,
+      issue_number: issueNumber
+    })
+    const currentLabels = currentLabelsResult.data.map(label => label.name)
+
+    core.debug(`current labels: ${currentLabels}`)
+    core.debug(`labels to remove: ${labelsToRemove}`)
+
+    // Remove unwanted labels
+    for (const label of labelsToRemove) {
+      if (currentLabels.includes(label)) {
+        await octokit.rest.issues.removeLabel({
+          owner: owner,
+          repo: repo,
+          issue_number: issueNumber,
+          name: label
+        })
+      }
+    }
+    core.info(`🏷️ labels removed: ${labelsToRemove}`)
+
+    removedLabels = labelsToRemove
+  }
+
+  // now, add the labels if any are provided
+  if (labelsToAdd.length > 0) {
+    core.debug(`attempting to apply labels: ${labelsToAdd}`)
+    await octokit.rest.issues.addLabels({
+      owner: owner,
+      repo: repo,
+      issue_number: issueNumber,
+      labels: labelsToAdd
+    })
+    core.info(`🏷️ labels added: ${labelsToAdd}`)
+
+    addedLabels = labelsToAdd
+  }
+
+  return {
+    added: addedLabels,
+    removed: removedLabels
   }
 }
 
@@ -32928,18 +33090,28 @@ function outputs(statusResult) {
 
 
 
-// import {stringToArray} from './functions/string-to-array'
+
+
 
 async function run() {
   try {
     core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
 
-    // Get the inputs
+    // get the inputs
     const token = core.getInput('github_token', {required: true})
     const checks = core.getInput('checks', {required: true})
     const prNumber = core.getInput('pr_number', {required: true})
+    const evaluations = stringToArray(
+      core.getInput('evaluations', {required: true})
+    )
+    const passLabels = stringToArray(
+      core.getInput('pass_labels', {required: false})
+    )
+    const failLabels = stringToArray(
+      core.getInput('fail_labels', {required: false})
+    )
 
-    // Create an octokit client with the retry plugin
+    // create an octokit client with the retry plugin
     const octokit = github.getOctokit(token, {
       additionalPlugins: [dist_bundle_namespaceObject.octokitRetry]
     })
@@ -32949,14 +33121,22 @@ async function run() {
 
     const data = {
       checks: checks,
-      prNumber: prNumber
+      prNumber: prNumber,
+      evaluations: evaluations
     }
 
-    // Get the status of the pull request
+    // get the status of the pull request
     const statusResult = await status_status(octokit, github.context, prNumber, data)
 
-    // Set the outputs
-    outputs(statusResult)
+    // set the outputs
+    const pass = outputs(statusResult, data)
+
+    // conditionally set the labels to add or remove
+    if (pass === true) {
+      await label(github.context, octokit, passLabels, failLabels)
+    } else {
+      await label(github.context, octokit, failLabels, passLabels)
+    }
 
     return 'success'
   } catch (error) {

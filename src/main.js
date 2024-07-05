@@ -5,18 +5,28 @@ import {octokitRetry} from '@octokit/plugin-retry'
 import {COLORS} from './functions/colors'
 import {status} from './functions/status'
 import {outputs} from './functions/outputs'
-// import {stringToArray} from './functions/string-to-array'
+import {stringToArray} from './functions/string-to-array'
+import {label} from './functions/label'
 
 export async function run() {
   try {
     core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
 
-    // Get the inputs
+    // get the inputs
     const token = core.getInput('github_token', {required: true})
     const checks = core.getInput('checks', {required: true})
     const prNumber = core.getInput('pr_number', {required: true})
+    const evaluations = stringToArray(
+      core.getInput('evaluations', {required: true})
+    )
+    const passLabels = stringToArray(
+      core.getInput('pass_labels', {required: false})
+    )
+    const failLabels = stringToArray(
+      core.getInput('fail_labels', {required: false})
+    )
 
-    // Create an octokit client with the retry plugin
+    // create an octokit client with the retry plugin
     const octokit = github.getOctokit(token, {
       additionalPlugins: [octokitRetry]
     })
@@ -26,14 +36,22 @@ export async function run() {
 
     const data = {
       checks: checks,
-      prNumber: prNumber
+      prNumber: prNumber,
+      evaluations: evaluations
     }
 
-    // Get the status of the pull request
+    // get the status of the pull request
     const statusResult = await status(octokit, context, prNumber, data)
 
-    // Set the outputs
-    outputs(statusResult)
+    // set the outputs
+    const pass = outputs(statusResult, data)
+
+    // conditionally set the labels to add or remove
+    if (pass === true) {
+      await label(context, octokit, passLabels, failLabels)
+    } else {
+      await label(context, octokit, failLabels, passLabels)
+    }
 
     return 'success'
   } catch (error) {
