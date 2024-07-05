@@ -33117,6 +33117,7 @@ async function run() {
       github.context.issue.number ||
       github.context.payload.pull_request.number
     if (!prNumber) {
+      /* istanbul ignore next */
       throw new Error(
         'pull request number not found in context or inputs, exiting'
       )
