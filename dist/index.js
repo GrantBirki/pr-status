@@ -33144,7 +33144,9 @@ async function run() {
 
     return 'success'
   } catch (error) {
+    /* istanbul ignore next */
     core.error(error.stack)
+    /* istanbul ignore next */
     core.setFailed(error.message)
   }
 }
