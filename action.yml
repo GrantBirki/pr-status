@@ -18,8 +18,8 @@ inputs:
     default: all
     required: true
   evaluations:
-    description: The attributes to evaluate the pull request against when determining its status on a PASS/FAIL system. This plays into the `evaluation` output
-    default: 'approved,ci_passing,mergeable' # this says that the pull request must be approved, have passing ci, and be mergeable
+    description: 'The attributes (comma separated list) to evaluate the pull request against when determining its status on a PASS/FAIL system. This plays into the `evaluation` output. Full example: approved,ci_passing,mergeable'
+    default: 'approved' # this says that the pull request must be approved and that is it
     required: false
   pass_labels:
     description: The labels to apply to the pull request if the evaluation passes - a comma separated list
