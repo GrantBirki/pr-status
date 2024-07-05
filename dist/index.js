@@ -33126,10 +33126,14 @@ async function run() {
     }
 
     // get the status of the pull request
+    core.info(
+      `🏃 running status checks on pull request ${COLORS.highlight}${prNumber}${COLORS.reset}`
+    )
     const statusResult = await status_status(octokit, github.context, prNumber, data)
 
     // set the outputs
     const pass = outputs(statusResult, data)
+    core.debug(`pass: ${pass}`)
 
     // conditionally set the labels to add or remove
     if (pass === true) {
