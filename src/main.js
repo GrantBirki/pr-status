@@ -69,9 +69,9 @@ export async function run() {
       // the labels to remove are the failing labels and the cleanup labels
       let labelsToRemove = failLabels + passLabelsCleanup
 
-      await label(context, octokit, labelsToAdd, labelsToRemove)
+      await label(prNumber, context, octokit, labelsToAdd, labelsToRemove)
     } else {
-      await label(context, octokit, failLabels, passLabels)
+      await label(prNumber, context, octokit, failLabels, passLabels)
     }
 
     return 'success'

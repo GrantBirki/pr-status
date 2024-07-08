@@ -33011,17 +33011,23 @@ function stringToArray(string) {
 
 
 // Helper function to add labels to a pull request
+// :param issueNumber: The issue number to add the labels to
 // :param context: The GitHub Actions event context
 // :param octokit: The octokit client
 // :param labelsToAdd: An array of labels to add to the pull request (Array)
 // :parm labelsToRemove: An array of labels to remove from the pull request (Array)
 // :returns: An object containing the labels added and removed (Object)
-async function label(context, octokit, labelsToAdd, labelsToRemove) {
+async function label(
+  issueNumber,
+  context,
+  octokit,
+  labelsToAdd,
+  labelsToRemove
+) {
   // Get the owner, repo, and issue number from the context
   const {owner, repo} = context.repo
-  const issueNumber = context.issue.number
-  var addedLabels = []
-  var removedLabels = []
+  var addedLabels = [] // an array of labels that were actually added
+  var removedLabels = [] // an array of labels that were actually removed
 
   // exit early if there are no labels to add or remove
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
@@ -33055,11 +33061,12 @@ async function label(context, octokit, labelsToAdd, labelsToRemove) {
           issue_number: issueNumber,
           name: label
         })
+        core.info(`🏷️ label removed: ${label}`)
+        removedLabels.push(label)
+      } else {
+        core.debug(`🏷️ label not found: '${label}' so it was not removed`)
       }
     }
-    core.info(`🏷️ labels removed: ${labelsToRemove}`)
-
-    removedLabels = labelsToRemove
   }
 
   // now, add the labels if any are provided
@@ -33154,9 +33161,9 @@ async function run() {
       // the labels to remove are the failing labels and the cleanup labels
       let labelsToRemove = failLabels + passLabelsCleanup
 
-      await label(github.context, octokit, labelsToAdd, labelsToRemove)
+      await label(prNumber, github.context, octokit, labelsToAdd, labelsToRemove)
     } else {
-      await label(github.context, octokit, failLabels, passLabels)
+      await label(prNumber, github.context, octokit, failLabels, passLabels)
     }
 
     return 'success'
