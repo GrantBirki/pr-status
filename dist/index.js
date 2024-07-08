@@ -33109,6 +33109,9 @@ async function run() {
     const passLabels = stringToArray(
       core.getInput('pass_labels', {required: false})
     )
+    const passLabelsCleanup = stringToArray(
+      core.getInput('pass_labels_cleanup', {required: false})
+    )
     const failLabels = stringToArray(
       core.getInput('fail_labels', {required: false})
     )
@@ -33146,7 +33149,12 @@ async function run() {
 
     // conditionally set the labels to add or remove
     if (pass === true) {
-      await label(github.context, octokit, passLabels, failLabels)
+      // in this case, the labels to add are just the passing labels
+      let labelsToAdd = passLabels
+      // the labels to remove are the failing labels and the cleanup labels
+      let labelsToRemove = failLabels + passLabelsCleanup
+
+      await label(github.context, octokit, labelsToAdd, labelsToRemove)
     } else {
       await label(github.context, octokit, failLabels, passLabels)
     }

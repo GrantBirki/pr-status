@@ -29,6 +29,7 @@ describe('main', () => {
     process.env.INPUT_PR_NUMBER = prNumber
     process.env.INPUT_EVALUATIONS = 'APPROVED'
     process.env.INPUT_PASS_LABELS = 'ready-for-deployment'
+    process.env.INPUT_PASS_LABELS_CLEANUP = 'needs-review'
     process.env.INPUT_FAIL_LABELS = 'needs-review'
 
     github.context.payload = {

@@ -25,6 +25,10 @@ inputs:
     description: The labels to apply to the pull request if the evaluation passes - a comma separated list
     default: ''
     required: false
+  pass_labels_cleanup:
+    description: 'An optional list of labels too "clean up" (remove) if the pull request passes evaluation - Examples: `"ready-for-review,waiting"`'
+    default: ''
+    required: false
   fail_labels:
     description: The labels to apply to the pull request if the evaluation fails - a comma separated list
     default: ''
