@@ -1,6 +1,8 @@
 import {label} from '../../src/functions/label'
 import * as core from '@actions/core'
 
+const issueNumber = 123
+
 var context
 var octokit
 beforeEach(() => {
@@ -43,7 +45,9 @@ beforeEach(() => {
 })
 
 test('adds a single label to a pull request and removes none', async () => {
-  expect(await label(context, octokit, ['read-for-review'], [])).toStrictEqual({
+  expect(
+    await label(issueNumber, context, octokit, ['read-for-review'], [])
+  ).toStrictEqual({
     added: ['read-for-review'],
     removed: []
   })
@@ -51,7 +55,13 @@ test('adds a single label to a pull request and removes none', async () => {
 
 test('adds a single label to a pull request and tries to remove a label but it is not on the PR to begin with', async () => {
   expect(
-    await label(context, octokit, ['read-for-review'], ['unknown-label'])
+    await label(
+      issueNumber,
+      context,
+      octokit,
+      ['read-for-review'],
+      ['unknown-label']
+    )
   ).toStrictEqual({
     added: ['read-for-review'],
     removed: []
@@ -60,7 +70,13 @@ test('adds a single label to a pull request and tries to remove a label but it i
 
 test('adds two labels to a pull request and removes none', async () => {
   expect(
-    await label(context, octokit, ['read-for-review', 'cool-label'], [])
+    await label(
+      issueNumber,
+      context,
+      octokit,
+      ['read-for-review', 'cool-label'],
+      []
+    )
   ).toStrictEqual({
     added: ['read-for-review', 'cool-label'],
     removed: []
@@ -68,7 +84,7 @@ test('adds two labels to a pull request and removes none', async () => {
 })
 
 test('does not add or remove any labels', async () => {
-  expect(await label(context, octokit, [], [])).toStrictEqual({
+  expect(await label(issueNumber, context, octokit, [], [])).toStrictEqual({
     added: [],
     removed: []
   })
@@ -76,7 +92,13 @@ test('does not add or remove any labels', async () => {
 
 test('adds a single label to a pull request and removes a single label', async () => {
   expect(
-    await label(context, octokit, ['deploy-success'], ['deploy-failed'])
+    await label(
+      issueNumber,
+      context,
+      octokit,
+      ['deploy-success'],
+      ['deploy-failed']
+    )
   ).toStrictEqual({
     added: ['deploy-success'],
     removed: ['deploy-failed']
@@ -86,6 +108,7 @@ test('adds a single label to a pull request and removes a single label', async (
 test('adds two labels to a pull request and removes two labels', async () => {
   expect(
     await label(
+      issueNumber,
       context,
       octokit,
       ['deploy-success', 'read-for-review'],
@@ -98,7 +121,9 @@ test('adds two labels to a pull request and removes two labels', async () => {
 })
 
 test('does not add any labels and removes a single label', async () => {
-  expect(await label(context, octokit, [], ['noop'])).toStrictEqual({
+  expect(
+    await label(issueNumber, context, octokit, [], ['noop'])
+  ).toStrictEqual({
     added: [],
     removed: ['noop']
   })

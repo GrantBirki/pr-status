@@ -1,15 +1,21 @@
 import * as core from '@actions/core'
 
 // Helper function to add labels to a pull request
+// :param issueNumber: The issue number to add the labels to
 // :param context: The GitHub Actions event context
 // :param octokit: The octokit client
 // :param labelsToAdd: An array of labels to add to the pull request (Array)
 // :parm labelsToRemove: An array of labels to remove from the pull request (Array)
 // :returns: An object containing the labels added and removed (Object)
-export async function label(context, octokit, labelsToAdd, labelsToRemove) {
+export async function label(
+  issueNumber,
+  context,
+  octokit,
+  labelsToAdd,
+  labelsToRemove
+) {
   // Get the owner, repo, and issue number from the context
   const {owner, repo} = context.repo
-  const issueNumber = context.issue.number
   var addedLabels = [] // an array of labels that were actually added
   var removedLabels = [] // an array of labels that were actually removed
 
