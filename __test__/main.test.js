@@ -65,6 +65,12 @@ describe('main', () => {
       `🏃 running status checks on pull request ${COLORS.highlight}${prNumber}${COLORS.reset}`
     )
     expect(debugMock).toHaveBeenCalledWith(`pass: true`)
+    expect(debugMock).toHaveBeenCalledWith(`labelsToAdd: ready-for-deployment`)
+    expect(debugMock).toHaveBeenCalledWith(`labelsToAdd isArray: true`)
+    expect(debugMock).toHaveBeenCalledWith(
+      `labelsToRemove: needs-review,needs-review`
+    )
+    expect(debugMock).toHaveBeenCalledWith(`labelsToRemove isArray: true`)
   })
 
   test('runs the action when the PR is not in a "pass" state', async () => {

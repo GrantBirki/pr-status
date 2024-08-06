@@ -33159,7 +33159,12 @@ async function run() {
       // in this case, the labels to add are just the passing labels
       let labelsToAdd = passLabels
       // the labels to remove are the failing labels and the cleanup labels
-      let labelsToRemove = failLabels + passLabelsCleanup
+      let labelsToRemove = failLabels.concat(passLabelsCleanup)
+
+      core.debug(`labelsToAdd: ${labelsToAdd}`)
+      core.debug(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
+      core.debug(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
+      core.debug(`labelsToRemove: ${labelsToRemove}`)
 
       await label(prNumber, github.context, octokit, labelsToAdd, labelsToRemove)
     } else {
