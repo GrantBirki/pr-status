@@ -8,6 +8,10 @@
 
 A GitHub Action that checks the status of a pull request.
 
+## About 💡
+
+Depending on the inputs provided, this Action will check the "status" of a pull request to determine if it has been fully approved, if it has passing CI, if it is mergeable, etc. It will then set outputs based on the status of the pull request and can apply or remove labels on the pull request based on the evaluation of the pull request.
+
 ## Inputs 📥
 
 | Input | Required? | Default | Description |
@@ -36,10 +40,16 @@ A GitHub Action that checks the status of a pull request.
 ```yaml
 name: pr-status
 
+# The minimum required permissions for this action to work
+permissions:
+  contents: read
+  checks: read
+  pull-requests: write # write is required to add/removes labels from the given pull request (set to read if you don't want to use the labels feature of this action)
+
 # run on all sorts of different pull request related events
 on:
   pull_request:
-    types: [opened, reopened, synchronize, review_requested, review_request_removed, labeled]
+    types: [opened, reopened, synchronize, review_requested, review_request_removed, labeled, unlabeled]
   pull_request_review:
     types: [submitted, dismissed]
 
