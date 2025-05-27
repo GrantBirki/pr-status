@@ -74,6 +74,14 @@ export async function status(octokit, context, prNumber, data) {
           : 'FAILURE'
 
       // If there are CI check defined, we need to check for the 'state' of the latest commit
+      // TODO: in the future, this might need to be refactored to look through all the checks individually
+      // and do a SUCCESS/FAILURE check just so that we are able to filter out "this" check. Meaning, that
+      // this current GitHub Action check does not fail the PR as it will always be in a running state
+      // at the time of the PR check
+      // For now, we will just use the state of the latest commit which will likely include the state of this check
+      // and that state will most likely be 'PENDING'. This only really matters if the context of this check (this action)
+      // is running on the commit that is being checked. So we should also do a check to see if this current action run's
+      // context is the same as the commit that is being checked for the commit status checks
     } else {
       commitStatus =
         result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
