@@ -32796,35 +32796,36 @@ const COLORS = {
 async function status_status(octokit, context, prNumber, data) {
   const query = `query($owner:String!, $name:String!, $number:Int!) {
     repository(owner:$owner, name:$name) {
-        pullRequest(number:$number) {
-            reviewDecision
-            mergeStateStatus
-            commits(last: 1) {
-                nodes {
-                    commit {
-                        checkSuites {
-                          totalCount
-                        }
-                        statusCheckRollup {
-                            state
-                            contexts(first:100) {
-                                nodes {
-                                    ... on CheckRun {
-                                        isRequired(pullRequestNumber:$number)
-                                        conclusion
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            reviews(states: APPROVED) {
+      pullRequest(number:$number) {
+        reviewDecision
+        mergeStateStatus
+        commits(last: 1) {
+          nodes {
+            commit {
+              checkSuites {
                 totalCount
+              }
+              statusCheckRollup {
+                state
+                contexts(first:100) {
+                  nodes {
+                    ... on CheckRun {
+                      isRequired(pullRequestNumber:$number)
+                      conclusion
+                    }
+                  }
+                }
+              }
             }
+          }
         }
+        reviews(states: APPROVED) {
+          totalCount
+        }
+      }
     }
-}`
+  }`
+
   // Note: https://docs.github.com/en/graphql/overview/schema-previews#merge-info-preview (mergeStateStatus)
   const variables = {
     owner: context.repo.owner,
