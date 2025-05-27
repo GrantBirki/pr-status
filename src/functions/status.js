@@ -73,7 +73,7 @@ export async function status(octokit, context, prNumber, data) {
           ? 'SUCCESS'
           : 'FAILURE'
 
-      // If there are CI checked defined, we need to check for the 'state' of the latest commit
+      // If there are CI check defined, we need to check for the 'state' of the latest commit
     } else {
       commitStatus =
         result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
