@@ -32849,11 +32849,16 @@ async function status_status(octokit, context, prNumber, data) {
 
       // If only the required checks need to pass
     } else if (data.checks === 'required') {
+      // https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks#check-statuses-and-conclusions
       commitStatus =
         result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes
           .filter(x => x.isRequired)
           .reduce(
-            (acc, x) => acc && ['SUCCESS', 'SKIPPED'].includes(x.conclusion),
+            (acc, x) =>
+              acc &&
+              ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(
+                (x.conclusion || '').toUpperCase()
+              ),
             true
           )
           ? 'SUCCESS'
