@@ -24,6 +24,9 @@ Depending on the inputs provided, this Action will check the "status" of a pull 
 | `pass_labels_cleanup` | `false` | - | An optional list of labels too "clean up" (remove) if the pull request passes evaluation - Examples: `"ready-for-review,waiting"` |
 | `fail_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation fails - Examples: `"needs-help,ci-failing,needs-review"` |
 
+> [!NOTE]  
+> If you use any of the `pass_labels`, `pass_labels_cleanup`, or `fail_labels` input options, you will need `pull-requests: write` permissions within your Actions workflow.
+
 ## Outputs 📤
 
 | Output | Description |
@@ -44,6 +47,7 @@ name: pr-status
 permissions:
   contents: read
   checks: read
+  statuses: read
   pull-requests: write # write is required to add/removes labels from the given pull request (set to read if you don't want to use the labels feature of this action)
 
 # run on all sorts of different pull request related events
