@@ -121,6 +121,59 @@ describe('outputs function', () => {
     expect(core.debug).toHaveBeenCalledWith(expect.stringContaining('PASS'))
   })
 
+  test('should handle minimum approvals evaluation', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      total_approvals: 3,
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS'
+    }
+    const data = {
+      evaluations: ['min_approvals=2']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
+    expect(core.debug).toHaveBeenCalledWith(expect.stringContaining('PASS'))
+  })
+
+  test('should fail minimum approvals evaluation if not met', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      total_approvals: 1,
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS'
+    }
+    const data = {
+      evaluations: ['min_approvals=2']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('requires at least 2 approvals')
+    )
+  })
+
+  test('should pass when one approval is required and the PR does not need to be in an approved state', () => {
+    const status = {
+      review_decision: 'CHANGES_REQUESTED',
+      total_approvals: 1,
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS'
+    }
+    const data = {
+      evaluations: ['min_approvals=1']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
+    expect(core.debug).toHaveBeenCalledWith(expect.stringContaining('PASS'))
+  })
+
   test('should handle unknown evaluation criteria', () => {
     const status = {
       review_decision: 'APPROVED',
