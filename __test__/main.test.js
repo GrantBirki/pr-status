@@ -88,21 +88,21 @@ describe('main', () => {
   test('should handle context fallback for pr number', async () => {
     // This test verifies that the main function works with the existing mocks
     // and covers the workflow parameter addition
-    
+
     const result = await run()
     expect(result).toBe('success')
-    
+
     // Verify the status function was called with the correct data structure
     expect(status.status).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      "123", // PR number as string
+      '123', // PR number as string
       expect.objectContaining({
-        prNumber: "123",
+        prNumber: '123',
         excludeChecks: expect.any(Array)
       })
     )
-    
+
     expect(outputs.outputs).toHaveBeenCalled()
   })
 })

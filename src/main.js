@@ -18,7 +18,8 @@ export async function run() {
 
     // get the inputs
     const token = core.getInput('github_token', {required: true})
-    const workflow = core.getInput('workflow', {required: false}) || context.workflow
+    const workflow =
+      core.getInput('workflow', {required: false}) || context.workflow
     const checks = core.getInput('checks', {required: true})
     const evaluations = stringToArray(
       core.getInput('evaluations', {required: true})
@@ -51,7 +52,6 @@ export async function run() {
       userAgent: `grantbirki/pr-status@${VERSION}`,
       additionalPlugins: [octokitRetry]
     })
-
 
     const data = {
       checks: checks,

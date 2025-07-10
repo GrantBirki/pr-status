@@ -317,7 +317,9 @@ describe('status function', () => {
     })
 
     expect(core.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Excluding check from status evaluation: pr-status')
+      expect.stringContaining(
+        'Excluding check from status evaluation: pr-status'
+      )
     )
   })
 
@@ -347,17 +349,17 @@ describe('status function', () => {
                         {
                           isRequired: true,
                           conclusion: 'SUCCESS',
-                          name: 'test-check'  // This will be excluded
+                          name: 'test-check' // This will be excluded
                         },
                         {
                           isRequired: true,
                           conclusion: 'SUCCESS',
-                          name: 'another-check'  // This will be excluded
+                          name: 'another-check' // This will be excluded
                         },
                         {
                           isRequired: false,
                           conclusion: 'SUCCESS',
-                          name: 'optional-check'  // This will be excluded
+                          name: 'optional-check' // This will be excluded
                         }
                       ]
                     }
@@ -376,11 +378,13 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       total_approvals: 1,
-      commit_status: null  // Should be null because all checks were filtered out
+      commit_status: null // Should be null because all checks were filtered out
     })
 
     expect(core.info).toHaveBeenCalledWith(
-      expect.stringContaining('no other CI checks found after filtering out excluded checks')
+      expect.stringContaining(
+        'no other CI checks found after filtering out excluded checks'
+      )
     )
   })
 
@@ -420,7 +424,7 @@ describe('status function', () => {
                         {
                           isRequired: false,
                           conclusion: 'PENDING',
-                          name: 'pr-status'  // This will be excluded
+                          name: 'pr-status' // This will be excluded
                         }
                       ]
                     }
@@ -439,7 +443,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       total_approvals: 1,
-      commit_status: 'FAILURE'  // Should use overall state since not all checks pass
+      commit_status: 'FAILURE' // Should use overall state since not all checks pass
     })
   })
 
@@ -492,12 +496,12 @@ describe('status function', () => {
     })
 
     expect(core.debug).toHaveBeenCalledWith(
-      expect.stringContaining('pr-status')  // Should use fallback workflow name
+      expect.stringContaining('pr-status') // Should use fallback workflow name
     )
   })
 
   test('should handle StatusContext nodes (not just CheckRun)', async () => {
-    data.excludeChecks = ['pr-status/check']  // Use exact name to match
+    data.excludeChecks = ['pr-status/check'] // Use exact name to match
     data.workflow = 'test-workflow'
 
     octokit.graphql = jest.fn().mockReturnValue({
@@ -522,12 +526,12 @@ describe('status function', () => {
                         {
                           isRequired: true,
                           state: 'SUCCESS',
-                          context: 'continuous-integration/travis-ci'  // StatusContext type
+                          context: 'continuous-integration/travis-ci' // StatusContext type
                         },
                         {
                           isRequired: false,
                           state: 'PENDING',
-                          context: 'pr-status/check'  // This should be excluded
+                          context: 'pr-status/check' // This should be excluded
                         }
                       ]
                     }
@@ -550,12 +554,14 @@ describe('status function', () => {
     })
 
     expect(core.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Excluding check from status evaluation: pr-status/check')
+      expect.stringContaining(
+        'Excluding check from status evaluation: pr-status/check'
+      )
     )
   })
 
   test('should use exact matching and not match substrings', async () => {
-    data.excludeChecks = ['test']  // This should NOT match 'test foo' or 'test bar'
+    data.excludeChecks = ['test'] // This should NOT match 'test foo' or 'test bar'
     data.workflow = 'ci-workflow'
 
     octokit.graphql = jest.fn().mockReturnValue({
@@ -580,22 +586,22 @@ describe('status function', () => {
                         {
                           isRequired: true,
                           conclusion: 'SUCCESS',
-                          name: 'test'  // This should be excluded (exact match)
+                          name: 'test' // This should be excluded (exact match)
                         },
                         {
                           isRequired: true,
                           conclusion: 'SUCCESS',
-                          name: 'test foo'  // This should NOT be excluded (not exact match)
+                          name: 'test foo' // This should NOT be excluded (not exact match)
                         },
                         {
                           isRequired: true,
                           conclusion: 'SUCCESS',
-                          name: 'test bar'  // This should NOT be excluded (not exact match)
+                          name: 'test bar' // This should NOT be excluded (not exact match)
                         },
                         {
                           isRequired: true,
                           conclusion: 'SUCCESS',
-                          name: 'ci-workflow'  // This should be excluded (matches workflow)
+                          name: 'ci-workflow' // This should be excluded (matches workflow)
                         }
                       ]
                     }
@@ -614,7 +620,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       total_approvals: 1,
-      commit_status: 'SUCCESS'  // Should be SUCCESS because 'test foo' and 'test bar' are still passing
+      commit_status: 'SUCCESS' // Should be SUCCESS because 'test foo' and 'test bar' are still passing
     })
 
     // Should exclude 'test' exactly but not 'test foo' or 'test bar'
@@ -622,9 +628,11 @@ describe('status function', () => {
       expect.stringContaining('Excluding check from status evaluation: test')
     )
     expect(core.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Excluding check from status evaluation: ci-workflow')
+      expect.stringContaining(
+        'Excluding check from status evaluation: ci-workflow'
+      )
     )
-    
+
     // Should evaluate 2 checks after exclusions (test foo and test bar)
     expect(core.debug).toHaveBeenCalledWith(
       expect.stringContaining('Evaluating 2 total checks (after exclusions)')

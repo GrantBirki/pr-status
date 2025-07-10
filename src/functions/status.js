@@ -55,15 +55,17 @@ export async function status(octokit, context, prNumber, data) {
       Accept: 'application/vnd.github.merge-info-preview+json'
     }
   }
-  
+
   // Get the checks to exclude from status evaluation
   const excludeChecks = data.excludeChecks || []
   const currentActionName = data.workflow || 'pr-status'
-  
+
   // Combine default exclusions with user-provided exclusions
   const checksToExclude = [...excludeChecks, currentActionName].filter(Boolean)
-  core.debug(`Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`)
-  
+  core.debug(
+    `Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
+  )
+
   // Make the GraphQL query
   const result = await octokit.graphql(query, variables)
 
@@ -80,29 +82,32 @@ export async function status(octokit, context, prNumber, data) {
       // If only the required checks need to pass
     } else if (data.checks === 'required') {
       // https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks#check-statuses-and-conclusions
-      const filteredChecks = result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes
-        .filter(x => x.isRequired)
-        .filter(x => {
-          // Exclude specified checks from status evaluation using EXACT matching
-          // For CheckRun nodes, use the 'name' field
-          // For StatusContext nodes, use the 'context' field
-          const checkName = x.name || x.context
-          if (!checkName) {
-            // If no name/context available, don't exclude it
-            return true
-          }
-          
-          const shouldExclude = checksToExclude.some(excludePattern => 
-            checkName === excludePattern
-          )
-          if (shouldExclude) {
-            core.debug(`Excluding check from status evaluation: ${checkName}`)
-          }
-          return !shouldExclude
-        })
-      
-      core.debug(`Evaluating ${filteredChecks.length} required checks (after exclusions)`)
-      
+      const filteredChecks =
+        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes
+          .filter(x => x.isRequired)
+          .filter(x => {
+            // Exclude specified checks from status evaluation using EXACT matching
+            // For CheckRun nodes, use the 'name' field
+            // For StatusContext nodes, use the 'context' field
+            const checkName = x.name || x.context
+            if (!checkName) {
+              // If no name/context available, don't exclude it
+              return true
+            }
+
+            const shouldExclude = checksToExclude.some(
+              excludePattern => checkName === excludePattern
+            )
+            if (shouldExclude) {
+              core.debug(`Excluding check from status evaluation: ${checkName}`)
+            }
+            return !shouldExclude
+          })
+
+      core.debug(
+        `Evaluating ${filteredChecks.length} required checks (after exclusions)`
+      )
+
       commitStatus = filteredChecks.reduce(
         (acc, x) =>
           acc &&
@@ -110,12 +115,16 @@ export async function status(octokit, context, prNumber, data) {
             (x.conclusion || x.state || '').toUpperCase()
           ),
         true
-      ) ? 'SUCCESS' : 'FAILURE'
+      )
+        ? 'SUCCESS'
+        : 'FAILURE'
 
       // If there are CI check defined, we need to check for the 'state' of the latest commit
       // We'll filter out excluded checks from the overall state calculation too
     } else {
-      const allChecks = result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes
+      const allChecks =
+        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+          .contexts.nodes
       const filteredChecks = allChecks.filter(x => {
         // Exclude specified checks from status evaluation using EXACT matching
         // For CheckRun nodes, use the 'name' field
@@ -125,30 +134,36 @@ export async function status(octokit, context, prNumber, data) {
           // If no name/context available, don't exclude it
           return true
         }
-        
-        const shouldExclude = checksToExclude.some(excludePattern => 
-          checkName === excludePattern
+
+        const shouldExclude = checksToExclude.some(
+          excludePattern => checkName === excludePattern
         )
         if (shouldExclude) {
           core.debug(`Excluding check from status evaluation: ${checkName}`)
         }
         return !shouldExclude
       })
-      
-      core.debug(`Evaluating ${filteredChecks.length} total checks (after exclusions)`)
-      
+
+      core.debug(
+        `Evaluating ${filteredChecks.length} total checks (after exclusions)`
+      )
+
       // If all other checks are successful, return SUCCESS, otherwise use the overall state
       if (filteredChecks.length === 0) {
-        core.info('💡 no other CI checks found after filtering out excluded checks')
+        core.info(
+          '💡 no other CI checks found after filtering out excluded checks'
+        )
         commitStatus = null
       } else {
-        const allOtherChecksSuccessful = filteredChecks.every(x => 
+        const allOtherChecksSuccessful = filteredChecks.every(x =>
           ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(
             (x.conclusion || x.state || '').toUpperCase()
           )
         )
-        commitStatus = allOtherChecksSuccessful ? 'SUCCESS' : 
-          result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.state
+        commitStatus = allOtherChecksSuccessful
+          ? 'SUCCESS'
+          : result.repository.pullRequest.commits.nodes[0].commit
+              .statusCheckRollup.state
       }
     }
   } catch (e) {
