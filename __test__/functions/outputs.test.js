@@ -63,7 +63,7 @@ describe('outputs function', () => {
     outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.warning).toHaveBeenCalledWith(
       expect.stringContaining('PR is not cleanly mergeable')
     )
   })
@@ -81,7 +81,7 @@ describe('outputs function', () => {
     outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.warning).toHaveBeenCalledWith(
       expect.stringContaining('commit status is not successful')
     )
   })
@@ -100,7 +100,7 @@ describe('outputs function', () => {
 
     expect(core.setOutput).toHaveBeenCalledWith('approved', 'false')
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.warning).toHaveBeenCalledWith(
       expect.stringContaining('PR is not approved')
     )
   })
@@ -152,7 +152,7 @@ describe('outputs function', () => {
     outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.warning).toHaveBeenCalledWith(
       expect.stringContaining('requires at least 2 approvals')
     )
   })
@@ -187,7 +187,7 @@ describe('outputs function', () => {
     outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.warning).toHaveBeenCalledWith(
       expect.stringContaining('unknown evaluation criteria')
     )
   })
