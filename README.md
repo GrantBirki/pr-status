@@ -19,7 +19,7 @@ Depending on the inputs provided, this Action will check the "status" of a pull 
 | `github_token` | `true` | `${{ github.token }}` | The GitHub token used to create an authenticated client - Provided for you by default! |
 | `pr_number` | `true` | `${{ github.event.number }}` | The pull request number to check the status of |
 | `checks` | `true` | `all` | Whether to only look for `required` ci checks or `all` ci checks on the pull request |
-| `evaluations` | `false` | `approved` | The attributes (comma separated list) to evaluate the pull request against when determining its status on a PASS/FAIL system. The default is just `approved` so a PR only needs proper approvals for this check to pass. This plays into the `evaluation` output. Full example: `approved,ci_passing,mergeable` - This full example would state that a PR must be considered approved, have passing CI, and be in a cleanly mergeable state to have the `evaluation` output be set to `PASS`. |
+| `evaluations` | `false` | `approved` | The attributes (comma separated list) to evaluate the pull request against when determining its status on a PASS/FAIL system. The default is just `approved` so a PR only needs proper approvals for this check to pass. This plays into the `evaluation` output. Full example: `approved,ci_passing,mergeable,min_approvals=2` - This full example would state that a PR must be considered approved, have passing CI, have at least two approvals, and be in a cleanly mergeable state to have the `evaluation` output be set to `PASS`. |
 | `pass_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation passes - Examples: `"ready-for-deployment,approved"` |
 | `pass_labels_cleanup` | `false` | - | An optional list of labels too "clean up" (remove) if the pull request passes evaluation - Examples: `"ready-for-review,waiting"` |
 | `fail_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation fails - Examples: `"needs-help,ci-failing,needs-review"` |
@@ -37,6 +37,23 @@ Depending on the inputs provided, this Action will check the "status" of a pull 
 | `merge_state_status` | The status of the pull request merge state - Examples: `"CLEAN"`, `"DIRTY"`, `"UNKNOWN"`, `"DRAFT"`, `"BLOCKED"`, etc |
 | `commit_status` | The ci status for the latest commit on the pull request - Examples: `"SUCCESS"`, `"FAILURE"`, `"PENDING"`, `null`, etc |
 | `evaluation` | The overall evaluation of the pull request based on the `evaluations` input - Examples: `"PASS"`, `"FAIL"` |
+
+## Evaluations 🧮
+
+The evaluations input allows you to specify which attributes to evaluate the pull request against. The following attributes are supported:
+
+- `approved`: Checks if the pull request is in a fully approved state
+- `ci_passing`: Checks if the latest commit on the pull request has passing CI checks
+- `mergeable`: Checks if the pull request is in a cleanly mergeable state
+- `min_approvals=N`: Checks if the pull request has at least N approvals (e.g., `min_approvals=2`)
+
+Here are a few examples of how to use the evaluations input:
+
+- `evaluations: approved` - Only checks if the pull request is approved
+- `evaluations: approved,ci_passing` - Checks if the pull request is approved and has passing CI
+- `evaluations: approved,mergeable,min_approvals=2` - Checks if the pull request is approved, mergeable, and has at least 2 approvals
+- `evaluations: approved,ci_passing,mergeable,min_approvals=2` - Checks if the pull request is approved, has passing CI, is mergeable, and has at least 2 approvals
+- `evaluations: min_approvals=1` - Checks if the pull request has at least 1 approval (does not even need to be in an approved state for this to pass). This can be useful if you want to check that at least someone has looked at the PR, but you don't care about the full approval state.
 
 ## Usage 💻
 

@@ -54,6 +54,17 @@ export function outputs(status, data) {
         )
         pass = false
       }
+    } else if (evaluation.includes('min_approvals')) {
+      // extract the number of approvals from the evaluation string
+      // e.g. "min_approvals=1" will extract 1
+      const minApprovals = parseInt(evaluation.split('=')[1])
+      if (status.total_approvals < minApprovals) {
+        // if the total approvals are less than the minimum required approvals, fail the evaluation
+        core.debug(
+          `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
+        )
+        pass = false
+      }
     } else {
       core.debug(
         `evaluation '${evaluation}' failed - unknown evaluation criteria`
