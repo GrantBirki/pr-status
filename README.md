@@ -38,6 +38,23 @@ Depending on the inputs provided, this Action will check the "status" of a pull 
 | `commit_status` | The ci status for the latest commit on the pull request - Examples: `"SUCCESS"`, `"FAILURE"`, `"PENDING"`, `null`, etc |
 | `evaluation` | The overall evaluation of the pull request based on the `evaluations` input - Examples: `"PASS"`, `"FAIL"` |
 
+## Evaluations 🧮
+
+The evaluations input allows you to specify which attributes to evaluate the pull request against. The following attributes are supported:
+
+- `approved`: Checks if the pull request is in a fully approved state
+- `ci_passing`: Checks if the latest commit on the pull request has passing CI checks
+- `mergeable`: Checks if the pull request is in a cleanly mergeable state
+- `min_approvals=N`: Checks if the pull request has at least N approvals (e.g., `min_approvals=2`)
+
+Here are a few examples of how to use the evaluations input:
+
+- `evaluations: approved` - Only checks if the pull request is approved
+- `evaluations: approved,ci_passing` - Checks if the pull request is approved and has passing CI
+- `evaluations: approved,mergeable,min_approvals=2` - Checks if the pull request is approved, mergeable, and has at least 2 approvals
+- `evaluations: approved,ci_passing,mergeable,min_approvals=2` - Checks if the pull request is approved, has passing CI, is mergeable, and has at least 2 approvals
+- `evaluations: min_approvals=1` - Checks if the pull request has at least 1 approval (does not even need to be in an approved state for this to pass). This can be useful if you want to check that at least someone has looked at the PR, but you don't care about the full approval state.
+
 ## Usage 💻
 
 ```yaml
