@@ -18,7 +18,9 @@ describe('status function', () => {
     jest.clearAllMocks()
 
     data = {
-      checks: 'all'
+      checks: 'all',
+      excludeChecks: ['pr-status'],
+      workflow: 'test-workflow'
     }
 
     context = {
@@ -53,15 +55,18 @@ describe('status function', () => {
                       nodes: [
                         {
                           isRequired: true,
-                          conclusion: 'SUCCESS'
+                          conclusion: 'SUCCESS',
+                          name: 'test-check'
                         },
                         {
                           isRequired: true,
-                          conclusion: 'SKIPPED'
+                          conclusion: 'SKIPPED',
+                          name: 'another-check'
                         },
                         {
                           isRequired: false,
-                          conclusion: 'SUCCESS'
+                          conclusion: 'SUCCESS',
+                          name: 'optional-check'
                         }
                       ]
                     }
@@ -116,15 +121,18 @@ describe('status function', () => {
                       nodes: [
                         {
                           isRequired: true,
-                          conclusion: 'SUCCESS'
+                          conclusion: 'SUCCESS',
+                          name: 'test-check'
                         },
                         {
                           isRequired: true,
-                          conclusion: 'SKIPPED'
+                          conclusion: 'SKIPPED',
+                          name: 'another-check'
                         },
                         {
                           isRequired: false,
-                          conclusion: 'FAILURE'
+                          conclusion: 'FAILURE',
+                          name: 'optional-check'
                         }
                       ]
                     }
@@ -169,15 +177,18 @@ describe('status function', () => {
                       nodes: [
                         {
                           isRequired: true,
-                          conclusion: 'FAILURE'
+                          conclusion: 'FAILURE',
+                          name: 'test-check'
                         },
                         {
                           isRequired: true,
-                          conclusion: 'SKIPPED'
+                          conclusion: 'SKIPPED',
+                          name: 'another-check'
                         },
                         {
                           isRequired: false,
-                          conclusion: 'SUCCESS'
+                          conclusion: 'SUCCESS',
+                          name: 'optional-check'
                         }
                       ]
                     }
@@ -246,5 +257,377 @@ describe('status function', () => {
       total_approvals: 1,
       commit_status: null
     })
+  })
+
+  test('should exclude specified checks from status evaluation', async () => {
+    data.excludeChecks = ['pr-status', 'test-check']
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'FAILURE',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'FAILURE',
+                          name: 'pr-status' // This should be excluded
+                        },
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'another-check'
+                        },
+                        {
+                          isRequired: false,
+                          conclusion: 'SUCCESS',
+                          name: 'optional-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'SUCCESS' // Should be SUCCESS because pr-status check was excluded
+    })
+
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Excluding check from status evaluation: pr-status')
+    )
+  })
+
+  test('should handle when all checks are filtered out in "all" mode', async () => {
+    data.excludeChecks = ['test-check', 'another-check', 'optional-check']
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'test-check'  // This will be excluded
+                        },
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'another-check'  // This will be excluded
+                        },
+                        {
+                          isRequired: false,
+                          conclusion: 'SUCCESS',
+                          name: 'optional-check'  // This will be excluded
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: null  // Should be null because all checks were filtered out
+    })
+
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining('no other CI checks found after filtering out excluded checks')
+    )
+  })
+
+  test('should handle mixed success/failure checks in "all" mode when some excluded', async () => {
+    data.excludeChecks = ['pr-status']
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'FAILURE',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'passing-check'
+                        },
+                        {
+                          isRequired: true,
+                          conclusion: 'FAILURE',
+                          name: 'failing-check'
+                        },
+                        {
+                          isRequired: false,
+                          conclusion: 'PENDING',
+                          name: 'pr-status'  // This will be excluded
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'FAILURE'  // Should use overall state since not all checks pass
+    })
+  })
+
+  test('should handle empty excludeChecks and workflow parameters', async () => {
+    data.excludeChecks = []
+    data.workflow = null
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 1
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'SUCCESS'
+    })
+
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('pr-status')  // Should use fallback workflow name
+    )
+  })
+
+  test('should handle StatusContext nodes (not just CheckRun)', async () => {
+    data.excludeChecks = ['pr-status/check']  // Use exact name to match
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 2
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          state: 'SUCCESS',
+                          context: 'continuous-integration/travis-ci'  // StatusContext type
+                        },
+                        {
+                          isRequired: false,
+                          state: 'PENDING',
+                          context: 'pr-status/check'  // This should be excluded
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'SUCCESS'
+    })
+
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Excluding check from status evaluation: pr-status/check')
+    )
+  })
+
+  test('should use exact matching and not match substrings', async () => {
+    data.excludeChecks = ['test']  // This should NOT match 'test foo' or 'test bar'
+    data.workflow = 'ci-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 4
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'test'  // This should be excluded (exact match)
+                        },
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'test foo'  // This should NOT be excluded (not exact match)
+                        },
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'test bar'  // This should NOT be excluded (not exact match)
+                        },
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'ci-workflow'  // This should be excluded (matches workflow)
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'SUCCESS'  // Should be SUCCESS because 'test foo' and 'test bar' are still passing
+    })
+
+    // Should exclude 'test' exactly but not 'test foo' or 'test bar'
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Excluding check from status evaluation: test')
+    )
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Excluding check from status evaluation: ci-workflow')
+    )
+    
+    // Should evaluate 2 checks after exclusions (test foo and test bar)
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluating 2 total checks (after exclusions)')
+    )
   })
 })

@@ -9,6 +9,10 @@ inputs:
     description: The GitHub token used to create an authenticated client - Provided for you by default!
     default: ${{ github.token }}
     required: true
+  workflow:
+    description: The name of the workflow that is running this action - used to exclude the current action from the checks
+    default: ${{ github.workflow }}
+    required: false
   pr_number:
     description: The number of the pull request to check the status of
     default: ${{ github.event.number }}
@@ -31,6 +35,10 @@ inputs:
     required: false
   fail_labels:
     description: The labels to apply to the pull request if the evaluation fails - a comma separated list
+    default: ''
+    required: false
+  exclude_checks:
+    description: 'A comma separated list of check names to exclude from CI status evaluation'
     default: ''
     required: false
 outputs:

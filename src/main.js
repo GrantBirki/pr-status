@@ -17,6 +17,7 @@ export async function run() {
 
     // get the inputs
     const token = core.getInput('github_token', {required: true})
+    const workflow = core.getInput('workflow', {required: false}) || context.workflow
     const checks = core.getInput('checks', {required: true})
     const evaluations = stringToArray(
       core.getInput('evaluations', {required: true})
@@ -29,6 +30,9 @@ export async function run() {
     )
     const failLabels = stringToArray(
       core.getInput('fail_labels', {required: false})
+    )
+    const excludeChecks = stringToArray(
+      core.getInput('exclude_checks', {required: false})
     )
     const prNumber =
       core.getInput('pr_number', {required: false}) ||
@@ -49,7 +53,9 @@ export async function run() {
     const data = {
       checks: checks,
       prNumber: prNumber,
-      evaluations: evaluations
+      evaluations: evaluations,
+      excludeChecks: excludeChecks,
+      workflow: workflow
     }
 
     // get the status of the pull request
