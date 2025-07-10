@@ -1,5 +1,6 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
+import {VERSION} from './version'
 import {context} from '@actions/github'
 import {octokitRetry} from '@octokit/plugin-retry'
 import {COLORS} from './functions/colors'
@@ -47,8 +48,10 @@ export async function run() {
 
     // create an octokit client with the retry plugin
     const octokit = github.getOctokit(token, {
+      userAgent: `grantbirki/pr-status@${VERSION}`,
       additionalPlugins: [octokitRetry]
     })
+
 
     const data = {
       checks: checks,
