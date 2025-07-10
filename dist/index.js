@@ -33610,7 +33610,7 @@ async function status_status(octokit, context, prNumber, data) {
 
   // Combine default exclusions with user-provided exclusions
   const checksToExclude = [...excludeChecks, currentActionName].filter(Boolean)
-  core.debug(
+  core.info(
     `Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
   )
 
@@ -33647,12 +33647,12 @@ async function status_status(octokit, context, prNumber, data) {
               excludePattern => checkName === excludePattern
             )
             if (shouldExclude) {
-              core.debug(`Excluding check from status evaluation: ${checkName}`)
+              core.info(`Excluding check from status evaluation: ${checkName}`)
             }
             return !shouldExclude
           })
 
-      core.debug(
+      core.info(
         `Evaluating ${filteredChecks.length} required checks (after exclusions)`
       )
 
@@ -33687,12 +33687,12 @@ async function status_status(octokit, context, prNumber, data) {
           excludePattern => checkName === excludePattern
         )
         if (shouldExclude) {
-          core.debug(`Excluding check from status evaluation: ${checkName}`)
+          core.info(`Excluding check from status evaluation: ${checkName}`)
         }
         return !shouldExclude
       })
 
-      core.debug(
+      core.info(
         `Evaluating ${filteredChecks.length} total checks (after exclusions)`
       )
 
@@ -33715,11 +33715,11 @@ async function status_status(octokit, context, prNumber, data) {
       }
     }
   } catch (e) {
-    core.debug(
+    core.info(
       `could not retrieve PR commit status: ${e} - Handled: ${COLORS.success}OK`
     )
-    core.debug('this repo may not have any CI checks defined')
-    core.debug('skipping commit status check and proceeding...')
+    core.info('this repo may not have any CI checks defined')
+    core.info('skipping commit status check and proceeding...')
     commitStatus = null
 
     // Try to display the raw GraphQL result for debugging purposes

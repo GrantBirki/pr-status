@@ -316,7 +316,7 @@ describe('status function', () => {
       commit_status: 'SUCCESS' // Should be SUCCESS because pr-status check was excluded
     })
 
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining(
         'Excluding check from status evaluation: pr-status'
       )
@@ -495,7 +495,7 @@ describe('status function', () => {
       commit_status: 'SUCCESS'
     })
 
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining('pr-status') // Should use fallback workflow name
     )
   })
@@ -553,7 +553,7 @@ describe('status function', () => {
       commit_status: 'SUCCESS'
     })
 
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining(
         'Excluding check from status evaluation: pr-status/check'
       )
@@ -624,17 +624,17 @@ describe('status function', () => {
     })
 
     // Should exclude 'test' exactly but not 'test foo' or 'test bar'
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining('Excluding check from status evaluation: test')
     )
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining(
         'Excluding check from status evaluation: ci-workflow'
       )
     )
 
     // Should evaluate 2 checks after exclusions (test foo and test bar)
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining('Evaluating 2 total checks (after exclusions)')
     )
   })
