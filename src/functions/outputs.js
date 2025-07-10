@@ -37,19 +37,19 @@ export function outputs(status, data) {
         status.review_decision !== 'APPROVED' &&
         status.review_decision !== null
       ) {
-        core.debug(`evaluation '${evaluation}' failed - PR is not approved`)
+        core.warning(`evaluation '${evaluation}' failed - PR is not approved`)
         pass = false
       }
     } else if (evaluation === 'mergeable') {
       if (status.merge_state_status !== 'CLEAN') {
-        core.debug(
+        core.warning(
           `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
         )
         pass = false
       }
     } else if (evaluation === 'ci_passing') {
       if (status.commit_status !== 'SUCCESS' && status.commit_status !== null) {
-        core.debug(
+        core.warning(
           `evaluation '${evaluation}' failed - commit status is not successful`
         )
         pass = false
@@ -60,13 +60,13 @@ export function outputs(status, data) {
       const minApprovals = parseInt(evaluation.split('=')[1])
       if (status.total_approvals < minApprovals) {
         // if the total approvals are less than the minimum required approvals, fail the evaluation
-        core.debug(
+        core.warning(
           `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
         )
         pass = false
       }
     } else {
-      core.debug(
+      core.warning(
         `evaluation '${evaluation}' failed - unknown evaluation criteria`
       )
       pass = false
