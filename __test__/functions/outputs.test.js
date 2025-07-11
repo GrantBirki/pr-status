@@ -64,7 +64,7 @@ describe('outputs function', () => {
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
     expect(core.warning).toHaveBeenCalledWith(
-      expect.stringContaining('PR is not cleanly mergeable')
+      expect.stringContaining('PR is not in a mergeable state')
     )
   })
 
