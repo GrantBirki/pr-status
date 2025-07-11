@@ -254,6 +254,7 @@ const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
     pullRequest(number:$number) {
       reviewDecision
       mergeStateStatus
+      mergeableState
       commits(last: 1) {
         nodes {
           commit {
@@ -378,8 +379,12 @@ function extractStatusResult(result, commitStatus) {
       result?.repository?.pullRequest?.reviews?.totalCount || null,
     merge_state_status:
       result?.repository?.pullRequest?.mergeStateStatus || null,
+    mergeable_state: result?.repository?.pullRequest?.mergeableState || null,
     commit_status: commitStatus || null
   }
+
+  core.info(`📊 Merge State Status: ${statusResult.merge_state_status}`)
+  core.info(`📊 Mergeable State: ${statusResult.mergeable_state}`)
 
   core.debug(`📊 Status result: ${JSON.stringify(statusResult, null, 2)}`)
   return statusResult
