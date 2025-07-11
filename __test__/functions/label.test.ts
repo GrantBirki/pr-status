@@ -137,3 +137,106 @@ test('does not add any labels and removes a single label', async () => {
     removed: ['noop']
   })
 })
+
+test('handles API error when adding labels', async () => {
+  octokit.rest.issues.addLabels = jest
+    .fn()
+    .mockRejectedValue(new Error('API Error'))
+
+  await expect(
+    label(issueNumber, context, octokit, ['test-label'], [])
+  ).rejects.toThrow('API Error')
+})
+
+test('handles API error when removing labels', async () => {
+  octokit.rest.issues.removeLabel = jest
+    .fn()
+    .mockRejectedValue(new Error('API Error'))
+
+  await expect(
+    label(issueNumber, context, octokit, [], ['deploy-failed'])
+  ).rejects.toThrow('API Error')
+})
+
+test('handles API error when listing labels', async () => {
+  octokit.rest.issues.listLabelsOnIssue = jest
+    .fn()
+    .mockRejectedValue(new Error('API Error'))
+
+  await expect(
+    label(issueNumber, context, octokit, [], ['test-label'])
+  ).rejects.toThrow('API Error')
+})
+
+test('handles empty labels array from API', async () => {
+  octokit.rest.issues.listLabelsOnIssue = jest.fn().mockResolvedValue({
+    data: []
+  })
+
+  expect(
+    await label(issueNumber, context, octokit, ['new-label'], ['non-existent'])
+  ).toStrictEqual({
+    added: ['new-label'],
+    removed: []
+  })
+})
+
+test('handles labels with special characters', async () => {
+  expect(
+    await label(
+      issueNumber,
+      context,
+      octokit,
+      ['ready-for-deployment/staging'],
+      ['deploy-failed']
+    )
+  ).toStrictEqual({
+    added: ['ready-for-deployment/staging'],
+    removed: ['deploy-failed']
+  })
+})
+
+test('handles multiple labels with same name in different arrays', async () => {
+  // Mock the listLabelsOnIssue to return the label so it can be removed
+  octokit.rest.issues.listLabelsOnIssue = jest.fn().mockReturnValueOnce({
+    data: [
+      {
+        name: 'test-label'
+      }
+    ]
+  })
+
+  expect(
+    await label(issueNumber, context, octokit, ['test-label'], ['test-label'])
+  ).toStrictEqual({
+    added: ['test-label'],
+    removed: ['test-label']
+  })
+})
+
+test('handles very long label names', async () => {
+  const longLabel = 'a'.repeat(200)
+  expect(
+    await label(issueNumber, context, octokit, [longLabel], [])
+  ).toStrictEqual({
+    added: [longLabel],
+    removed: []
+  })
+})
+
+test('handles case sensitivity in label names', async () => {
+  octokit.rest.issues.listLabelsOnIssue = jest.fn().mockResolvedValue({
+    data: [
+      {
+        name: 'Deploy-Failed' // Capital D
+      }
+    ]
+  })
+
+  expect(
+    await label(issueNumber, context, octokit, [], ['deploy-failed']) // lowercase d
+  ).toStrictEqual({
+    added: [],
+    removed: [] // Should not match due to case sensitivity
+  })
+})

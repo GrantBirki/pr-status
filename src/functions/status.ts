@@ -82,7 +82,6 @@ function filterExcludedChecks(
     const checkName: string = getCheckName(check)
     if (checkName === 'Unknown') {
       // If no name/context available, don't exclude it
-      /* istanbul ignore next */
       return true
     }
 
@@ -390,7 +389,6 @@ export async function status(
         core.debug('raw graphql result for debugging:')
         core.debug(JSON.stringify(result))
       } catch {
-        // istanbul ignore next
         core.debug(
           'Could not output raw graphql result for debugging - This is bad'
         )

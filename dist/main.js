@@ -33,6 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.determineLabelActions = determineLabelActions;
 exports.run = run;
 const core = __importStar(require("@actions/core"));
 const github = __importStar(require("@actions/github"));

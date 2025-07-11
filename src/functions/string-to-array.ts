@@ -37,9 +37,7 @@ export function stringToArray(string: string | null | undefined): string[] {
 
     return results
   } catch (error) {
-    /* istanbul ignore next */
     core.error(`failed string for debugging purposes: ${string}`)
-    /* istanbul ignore next */
     throw new Error(`could not convert String to Array - error: ${error}`)
   }
 }

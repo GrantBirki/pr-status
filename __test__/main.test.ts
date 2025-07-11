@@ -1,4 +1,4 @@
-import {run} from '../src/main'
+import {run, determineLabelActions} from '../src/main'
 import * as github from '@actions/github'
 import * as core from '@actions/core'
 import {COLORS} from '../src/functions/colors'
@@ -283,5 +283,231 @@ describe('main', () => {
         workflow: 'test-workflow' // Should use context workflow
       })
     )
+  })
+
+  test('handles empty pass_labels correctly', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: prNumber,
+        evaluations: 'approved',
+        pass_labels: '', // Empty pass labels
+        pass_labels_cleanup: '',
+        fail_labels: 'needs-review',
+        workflow: 'test-workflow',
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    expect(await run()).toBe('success')
+    expect(infoMock).toHaveBeenCalledWith('labelsToAdd: ')
+    expect(infoMock).toHaveBeenCalledWith('labelsToRemove: needs-review')
+  })
+
+  test('handles empty fail_labels correctly', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: prNumber,
+        evaluations: 'approved',
+        pass_labels: 'ready-to-merge',
+        pass_labels_cleanup: '',
+        fail_labels: '', // Empty fail labels
+        workflow: 'test-workflow',
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    jest.spyOn(outputs, 'outputs').mockImplementation(() => {
+      return false // Make it fail
+    })
+
+    expect(await run()).toBe('success')
+    expect(infoMock).toHaveBeenCalledWith('labelsToAdd: ')
+    expect(infoMock).toHaveBeenCalledWith('labelsToRemove: ready-to-merge')
+  })
+
+  test('handles multiple exclude_checks', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: prNumber,
+        evaluations: 'approved',
+        pass_labels: 'ready-to-merge',
+        pass_labels_cleanup: 'waiting-for-approval',
+        fail_labels: 'needs-work',
+        workflow: 'test-workflow',
+        exclude_checks: 'check1,check2,check3'
+      }
+      return inputs[name] || ''
+    })
+
+    expect(await run()).toBe('success')
+    expect(status.status).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        excludeChecks: ['check1', 'check2', 'check3']
+      })
+    )
+  })
+
+  test('handles complex pass_labels_cleanup correctly', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: prNumber,
+        evaluations: 'approved',
+        pass_labels: 'ready-to-merge',
+        pass_labels_cleanup: 'waiting-for-approval,in-review',
+        fail_labels: 'needs-work',
+        workflow: 'test-workflow',
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    expect(await run()).toBe('success')
+    expect(infoMock).toHaveBeenCalledWith('labelsToAdd: ready-to-merge')
+    expect(infoMock).toHaveBeenCalledWith(
+      'labelsToRemove: needs-work,waiting-for-approval,in-review'
+    )
+  })
+
+  test('handles pr_number from payload correctly', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: '', // Empty PR number
+        evaluations: 'approved',
+        pass_labels: '',
+        pass_labels_cleanup: '',
+        fail_labels: '',
+        workflow: 'test-workflow',
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    // Mock github context with payload but no issue number
+    Object.defineProperty(github, 'context', {
+      value: {
+        payload: {
+          pull_request: {
+            number: 789
+          }
+        },
+        repo: {
+          owner: 'test',
+          repo: 'test'
+        },
+        issue: {
+          number: 789 // Should match payload
+        },
+        workflow: 'test-workflow'
+      },
+      writable: true
+    })
+
+    expect(await run()).toBe('success')
+    expect(infoMock).toHaveBeenCalledWith(expect.stringContaining('789'))
+  })
+
+  test('handles parseInt edge cases for pr_number', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: 'invalid', // Invalid number
+        evaluations: 'approved',
+        pass_labels: '',
+        pass_labels_cleanup: '',
+        fail_labels: '',
+        workflow: 'test-workflow',
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    expect(await run()).toBe('failure')
+    expect(setFailedMock).toHaveBeenCalledWith(
+      'pull request number not found in context or inputs, exiting'
+    )
+  })
+})
+
+// Test the determineLabelActions function directly
+describe('determineLabelActions', () => {
+  test('should return correct labels when pass is true', () => {
+    const result = determineLabelActions(
+      true,
+      ['ready-to-merge', 'approved'],
+      ['needs-work', 'rejected'],
+      ['waiting-for-approval']
+    )
+
+    expect(result).toEqual({
+      labelsToAdd: ['ready-to-merge', 'approved'],
+      labelsToRemove: ['needs-work', 'rejected', 'waiting-for-approval']
+    })
+  })
+
+  test('should return correct labels when pass is false', () => {
+    const result = determineLabelActions(
+      false,
+      ['ready-to-merge', 'approved'],
+      ['needs-work', 'rejected'],
+      ['waiting-for-approval']
+    )
+
+    expect(result).toEqual({
+      labelsToAdd: ['needs-work', 'rejected'],
+      labelsToRemove: ['ready-to-merge', 'approved']
+    })
+  })
+
+  test('should handle empty arrays', () => {
+    const result = determineLabelActions(true, [], [], [])
+
+    expect(result).toEqual({
+      labelsToAdd: [],
+      labelsToRemove: []
+    })
+  })
+
+  test('should handle empty fail labels', () => {
+    const result = determineLabelActions(
+      false,
+      ['ready-to-merge'],
+      [],
+      ['waiting-for-approval']
+    )
+
+    expect(result).toEqual({
+      labelsToAdd: [],
+      labelsToRemove: ['ready-to-merge']
+    })
+  })
+
+  test('should handle empty pass labels', () => {
+    const result = determineLabelActions(
+      true,
+      [],
+      ['needs-work'],
+      ['waiting-for-approval']
+    )
+
+    expect(result).toEqual({
+      labelsToAdd: [],
+      labelsToRemove: ['needs-work', 'waiting-for-approval']
+    })
   })
 })

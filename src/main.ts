@@ -24,7 +24,7 @@ import {
  * @param passLabelsCleanup - Labels to remove when passing
  * @returns Object with labelsToAdd and labelsToRemove arrays
  */
-function determineLabelActions(
+export function determineLabelActions(
   pass: boolean,
   passLabels: string[],
   failLabels: string[],
@@ -78,7 +78,6 @@ export async function run(): Promise<string> {
     )
 
     if (!prNumber || prNumber === 0) {
-      /* istanbul ignore next */
       throw new Error(
         'pull request number not found in context or inputs, exiting'
       )
@@ -136,11 +135,8 @@ export async function run(): Promise<string> {
 
     return 'success'
   } catch (error) {
-    /* istanbul ignore next */
     core.error((error as Error).stack || (error as Error).message)
-    /* istanbul ignore next */
     core.setFailed((error as Error).message)
-    /* istanbul ignore next */
     return 'failure'
   }
 }

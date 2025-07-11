@@ -470,4 +470,664 @@ describe('status function', () => {
     const result = await status(octokit, context, prNumber, data)
     expect(result.commit_status).toBe('SUCCESS')
   })
+
+  test('should handle empty commit nodes', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: []
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe(null)
+  })
+
+  test('should handle null commit in nodes', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: null
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe(null)
+  })
+
+  test('should handle null statusCheckRollup', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: null
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe(null)
+  })
+
+  test('should handle null contexts in statusCheckRollup', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: null
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe(null)
+  })
+
+  test('should handle null nodes in contexts', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: null
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe(null)
+  })
+
+  test('should handle check exclusions with all checks', async () => {
+    data.checks = 'all'
+    data.excludeChecks = ['test-check']
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'test-check'
+                        },
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'another-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('SUCCESS') // Only 'another-check' should be considered
+  })
+
+  test('should handle checks with IN_PROGRESS status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'PENDING',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'IN_PROGRESS',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('PENDING')
+  })
+
+  test('should handle checks with QUEUED status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'PENDING',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'QUEUED',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('PENDING')
+  })
+
+  test('should handle checks with REQUESTED status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'PENDING',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'REQUESTED',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('PENDING')
+  })
+
+  test('should handle checks with WAITING status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'PENDING',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'WAITING',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('PENDING')
+  })
+
+  test('should handle checks with CANCELLED status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'FAILURE',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'CANCELLED',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('FAILURE')
+  })
+
+  test('should handle checks with TIMED_OUT status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'FAILURE',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'TIMED_OUT',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('FAILURE')
+  })
+
+  test('should handle checks with ACTION_REQUIRED status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'FAILURE',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'ACTION_REQUIRED',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('FAILURE')
+  })
+
+  test('should handle checks with STALE status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'FAILURE',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'STALE',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('FAILURE')
+  })
+
+  test('should handle unknown check status', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'UNKNOWN',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'UNKNOWN_STATUS',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.commit_status).toBe('UNKNOWN') // Should fall back to overall state
+  })
+
+  test('should handle different review totalCount values', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 5 // Different count
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: []
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.total_approvals).toBe(5)
+  })
+
+  test('should handle zero review totalCount', async () => {
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: null,
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 0
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 3
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: []
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+    expect(result.total_approvals).toBe(0)
+  })
+
+  test('should handle various mergeStateStatus values', async () => {
+    const testCases = [
+      'DIRTY',
+      'UNSTABLE',
+      'BLOCKED',
+      'BEHIND',
+      'DRAFT',
+      'UNKNOWN'
+    ]
+
+    for (const mergeState of testCases) {
+      octokit.graphql = jest.fn().mockReturnValue({
+        repository: {
+          pullRequest: {
+            reviewDecision: 'APPROVED',
+            mergeStateStatus: mergeState,
+            reviews: {
+              totalCount: 1
+            },
+            commits: {
+              nodes: [
+                {
+                  commit: {
+                    checkSuites: {
+                      totalCount: 3
+                    },
+                    statusCheckRollup: {
+                      state: 'SUCCESS',
+                      contexts: {
+                        nodes: []
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      })
+
+      const result = await status(octokit, context, prNumber, data)
+      expect(result.merge_state_status).toBe(mergeState)
+    }
+  })
 })
