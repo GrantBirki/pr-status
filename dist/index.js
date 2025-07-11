@@ -34063,7 +34063,7 @@ function outputs(status, data) {
     'evaluation',
     pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
   )
-  core.debug(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
+  core.info(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass
 }
@@ -34137,7 +34137,7 @@ async function label(
 
   // exit early if there are no labels to add or remove
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
-    core.debug('🏷️ no labels to add or remove')
+    core.info('🏷️ no labels to add or remove')
     return {
       added: [],
       removed: []
@@ -34155,8 +34155,8 @@ async function label(
     })
     const currentLabels = currentLabelsResult.data.map(label => label.name)
 
-    core.debug(`current labels: ${currentLabels}`)
-    core.debug(`labels to remove: ${labelsToRemove}`)
+    core.info(`current labels: ${currentLabels}`)
+    core.info(`labels to remove: ${labelsToRemove}`)
 
     // Remove unwanted labels
     for (const label of labelsToRemove) {
@@ -34170,7 +34170,7 @@ async function label(
         core.info(`🏷️ label removed: ${label}`)
         removedLabels.push(label)
       } else {
-        core.debug(`🏷️ label not found: '${label}' so it was not removed`)
+        core.info(`🏷️ label not found: '${label}' so it was not removed`)
       }
     }
   }
@@ -34236,7 +34236,7 @@ function determineLabelActions(
 
 async function run() {
   try {
-    core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
+    core.info(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
 
     // for debugging, dump the context object
     core.debug(`context: ${JSON.stringify(github.context, null, 2)}`)
@@ -34294,7 +34294,7 @@ async function run() {
 
     // set the outputs
     const pass = outputs(statusResult, data)
-    core.debug(`pass: ${pass}`)
+    core.info(`pass: ${pass}`)
 
     // determine labels to add and remove based on evaluation result
     const {labelsToAdd, labelsToRemove} = determineLabelActions(
@@ -34304,10 +34304,10 @@ async function run() {
       passLabelsCleanup
     )
 
-    core.debug(`labelsToAdd: ${labelsToAdd}`)
-    core.debug(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
-    core.debug(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
-    core.debug(`labelsToRemove: ${labelsToRemove}`)
+    core.info(`labelsToAdd: ${labelsToAdd}`)
+    core.info(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
+    core.info(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
+    core.info(`labelsToRemove: ${labelsToRemove}`)
 
     await label(prNumber, github.context, octokit, labelsToAdd, labelsToRemove)
 
