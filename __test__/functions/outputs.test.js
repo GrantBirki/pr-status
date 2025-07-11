@@ -16,6 +16,7 @@ describe('outputs function', () => {
       review_decision: 'APPROVED',
       total_approvals: 2,
       merge_state_status: 'CLEAN',
+      mergeable_state: 'MERGEABLE',
       commit_status: 'SUCCESS'
     }
     const data = {

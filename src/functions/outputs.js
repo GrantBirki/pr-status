@@ -83,7 +83,7 @@ export function outputs(status, data) {
         return false
       }
     } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
-      if (status.merge_state_status !== 'CLEAN') {
+      if (status.mergeable_state !== 'MERGEABLE') {
         core.warning(
           `⚠️ Evaluation '${evaluation}' failed - PR is not cleanly mergeable`
         )
