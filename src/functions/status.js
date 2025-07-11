@@ -81,6 +81,24 @@ export async function status(octokit, context, prNumber, data) {
 
       // If only the required checks need to pass
     } else if (data.checks === 'required') {
+      // Log all available checks for debugging
+      const allChecks =
+        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+          .contexts.nodes
+      core.info(
+        `📋 Found ${allChecks.length} total CI checks on this pull request`
+      )
+      allChecks.forEach(check => {
+        const checkName = check.name || check.context || 'Unknown'
+        const isRequired = check.isRequired ? '(required)' : '(optional)'
+        const checkStatus = (
+          check.conclusion ||
+          check.state ||
+          'UNKNOWN'
+        ).toUpperCase()
+        core.info(`  - ${checkName} ${isRequired}: ${checkStatus}`)
+      })
+
       // https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks#check-statuses-and-conclusions
       const filteredChecks =
         result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes
@@ -108,6 +126,29 @@ export async function status(octokit, context, prNumber, data) {
         `Evaluating ${filteredChecks.length} required checks (after exclusions)`
       )
 
+      // Log the status of each required check for debugging
+      let hasFailingCheck = false
+      filteredChecks.forEach(check => {
+        const checkName = check.name || check.context || 'Unknown'
+        const checkStatus = (
+          check.conclusion ||
+          check.state ||
+          ''
+        ).toUpperCase()
+        const isSuccessful = ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(
+          checkStatus
+        )
+
+        if (isSuccessful) {
+          core.info(`✅ Required check '${checkName}': ${checkStatus}`)
+        } else {
+          core.info(
+            `❌ Required check '${checkName}': ${checkStatus} (FAILING)`
+          )
+          hasFailingCheck = true
+        }
+      })
+
       commitStatus = filteredChecks.reduce(
         (acc, x) =>
           acc &&
@@ -119,9 +160,37 @@ export async function status(octokit, context, prNumber, data) {
         ? 'SUCCESS'
         : 'FAILURE'
 
+      if (hasFailingCheck) {
+        core.info(
+          `🔴 Overall required checks status: FAILURE (one or more required checks failed)`
+        )
+      } else {
+        core.info(
+          `🟢 Overall required checks status: SUCCESS (all required checks passed)`
+        )
+      }
+
       // If there are CI check defined, we need to check for the 'state' of the latest commit
       // We'll filter out excluded checks from the overall state calculation too
     } else {
+      // Log all available checks for debugging
+      const allAvailableChecks =
+        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+          .contexts.nodes
+      core.info(
+        `📋 Found ${allAvailableChecks.length} total CI checks on this pull request`
+      )
+      allAvailableChecks.forEach(check => {
+        const checkName = check.name || check.context || 'Unknown'
+        const isRequired = check.isRequired ? '(required)' : '(optional)'
+        const checkStatus = (
+          check.conclusion ||
+          check.state ||
+          'UNKNOWN'
+        ).toUpperCase()
+        core.info(`  - ${checkName} ${isRequired}: ${checkStatus}`)
+      })
+
       const allChecks =
         result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
           .contexts.nodes
@@ -155,6 +224,27 @@ export async function status(octokit, context, prNumber, data) {
         )
         commitStatus = null
       } else {
+        // Log the status of each check for debugging
+        let hasFailingCheck = false
+        filteredChecks.forEach(check => {
+          const checkName = check.name || check.context || 'Unknown'
+          const checkStatus = (
+            check.conclusion ||
+            check.state ||
+            ''
+          ).toUpperCase()
+          const isSuccessful = ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(
+            checkStatus
+          )
+
+          if (isSuccessful) {
+            core.info(`✅ Check '${checkName}': ${checkStatus}`)
+          } else {
+            core.info(`❌ Check '${checkName}': ${checkStatus} (FAILING)`)
+            hasFailingCheck = true
+          }
+        })
+
         const allOtherChecksSuccessful = filteredChecks.every(x =>
           ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(
             (x.conclusion || x.state || '').toUpperCase()
@@ -164,6 +254,17 @@ export async function status(octokit, context, prNumber, data) {
           ? 'SUCCESS'
           : result.repository.pullRequest.commits.nodes[0].commit
               .statusCheckRollup.state
+
+        if (hasFailingCheck) {
+          const overallState =
+            result.repository.pullRequest.commits.nodes[0].commit
+              .statusCheckRollup.state
+          core.info(
+            `🔴 Overall CI status: ${overallState} (one or more checks failed)`
+          )
+        } else {
+          core.info(`🟢 Overall CI status: SUCCESS (all checks passed)`)
+        }
       }
     }
   } catch (e) {
