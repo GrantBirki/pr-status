@@ -33531,7 +33531,7 @@ var github = __nccwpck_require__(3228);
 // - v1.1.1-rc.1
 // - etc
 
-const VERSION = 'v1.5.0'
+const VERSION = 'v1.6.0'
 
 // EXTERNAL MODULE: ./node_modules/@octokit/plugin-retry/dist-node/index.js
 var dist_node = __nccwpck_require__(3450);
@@ -33603,7 +33603,6 @@ const CHECK_TYPES = {
 
 
 
-
 /**
  * Get the name of a check from either CheckRun or StatusContext node
  * @param {Object} check - The check object (CheckRun or StatusContext)
@@ -33640,6 +33639,11 @@ function isSuccessfulStatus(status) {
  * @param {Array} checks - Array of check objects
  */
 function logAllChecks(checks) {
+  if (checks.length === 0) {
+    core.info('📋 No CI checks found on this pull request')
+    return
+  }
+
   core.info(`📋 Found ${checks.length} total CI checks on this pull request`)
   checks.forEach(check => {
     const checkName = getCheckName(check)
@@ -33656,11 +33660,14 @@ function logAllChecks(checks) {
  * @returns {Array} Filtered array of checks
  */
 function filterExcludedChecks(checks, excludePatterns) {
+  if (!excludePatterns || excludePatterns.length === 0) {
+    return checks
+  }
+
   return checks.filter(check => {
     const checkName = getCheckName(check)
     if (checkName === 'Unknown') {
-      // If no name/context available, don't exclude it
-      /* istanbul ignore next */
+      core.debug('⚠️ Check with unknown name found, including in evaluation')
       return true
     }
 
@@ -33668,7 +33675,7 @@ function filterExcludedChecks(checks, excludePatterns) {
       excludePattern => checkName === excludePattern
     )
     if (shouldExclude) {
-      core.info(`Excluding check from status evaluation: ${checkName}`)
+      core.info(`🚫 Excluding check from status evaluation: ${checkName}`)
     }
     return !shouldExclude
   })
@@ -33722,24 +33729,18 @@ function areAllChecksSuccessful(checks) {
  * @param {string} overallState - The overall state from GitHub (for 'all' mode)
  */
 function logOverallStatus(hasFailures, checkType, overallState = null) {
+  const isRequired = checkType === CHECK_TYPES.REQUIRED
+
   if (hasFailures) {
-    if (checkType === CHECK_TYPES.REQUIRED) {
-      core.info(
-        `🔴 Overall required checks status: FAILURE (one or more required checks failed)`
-      )
-    } else {
-      core.info(
-        `🔴 Overall CI status: ${overallState} (one or more checks failed)`
-      )
-    }
+    const statusMessage = isRequired
+      ? '🔴 Overall required checks status: FAILURE (one or more required checks failed)'
+      : `🔴 Overall CI status: ${overallState || 'FAILURE'} (one or more checks failed)`
+    core.info(statusMessage)
   } else {
-    if (checkType === CHECK_TYPES.REQUIRED) {
-      core.info(
-        `🟢 Overall required checks status: SUCCESS (all required checks passed)`
-      )
-    } else {
-      core.info(`🟢 Overall CI status: SUCCESS (all checks passed)`)
-    }
+    const statusMessage = isRequired
+      ? '🟢 Overall required checks status: SUCCESS (all required checks passed)'
+      : '🟢 Overall CI status: SUCCESS (all checks passed)'
+    core.info(statusMessage)
   }
 }
 
@@ -33750,10 +33751,11 @@ function logOverallStatus(hasFailures, checkType, overallState = null) {
  * @returns {string} The commit status
  */
 function processRequiredChecks(result, checksToExclude) {
-  // Log all available checks for debugging
   const allChecks =
     result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
       .contexts.nodes
+
+  // Log all available checks for debugging
   logAllChecks(allChecks)
 
   // Filter to required checks only, then exclude specified checks
@@ -33761,8 +33763,13 @@ function processRequiredChecks(result, checksToExclude) {
   const filteredChecks = filterExcludedChecks(requiredChecks, checksToExclude)
 
   core.info(
-    `Evaluating ${filteredChecks.length} required checks (after exclusions)`
+    `🔍 Evaluating ${filteredChecks.length} required checks (after exclusions)`
   )
+
+  if (filteredChecks.length === 0) {
+    core.info('💡 No required checks found after filtering')
+    return PR_STATUS.SUCCESS
+  }
 
   // Log the status of each required check and check for failures
   const hasFailingCheck = logCheckResults(filteredChecks, CHECK_TYPES.REQUIRED)
@@ -33785,22 +33792,23 @@ function processRequiredChecks(result, checksToExclude) {
  * @returns {string} The commit status
  */
 function processAllChecks(result, checksToExclude) {
-  // Log all available checks for debugging
   const allChecks =
     result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
       .contexts.nodes
+
+  // Log all available checks for debugging
   logAllChecks(allChecks)
 
   // Filter out excluded checks
   const filteredChecks = filterExcludedChecks(allChecks, checksToExclude)
 
   core.info(
-    `Evaluating ${filteredChecks.length} total checks (after exclusions)`
+    `🔍 Evaluating ${filteredChecks.length} total checks (after exclusions)`
   )
 
-  // If all other checks are successful, return SUCCESS, otherwise use the overall state
+  // If no checks remain after filtering, return null
   if (filteredChecks.length === 0) {
-    core.info('💡 no other CI checks found after filtering out excluded checks')
+    core.info('💡 No CI checks found after filtering out excluded checks')
     return null
   }
 
@@ -33809,16 +33817,13 @@ function processAllChecks(result, checksToExclude) {
 
   // Determine overall status
   const allSuccessful = areAllChecksSuccessful(filteredChecks)
-  const commitStatus = allSuccessful
-    ? PR_STATUS.SUCCESS
-    : result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-        .state
-
-  // Log overall status summary
-  const overallState =
+  const rollupState =
     result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
       .state
-  logOverallStatus(hasFailingCheck, CHECK_TYPES.ALL, overallState)
+  const commitStatus = allSuccessful ? PR_STATUS.SUCCESS : rollupState
+
+  // Log overall status summary
+  logOverallStatus(hasFailingCheck, CHECK_TYPES.ALL, rollupState)
 
   return commitStatus
 }
@@ -33864,14 +33869,14 @@ const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
   }
 }`
 
-// Helper function to get the status of a pull request from multiple perspectives
-// :param octokit: The octokit client
-// :param context: The GitHub Actions event context
-// :param prNumber: The pull request number
-// :param data: An object containing the checks parameter and other data
-// :return: An object containing the review_decision, merge_state_status, and commit_status
-async function status_status(octokit, context, prNumber, data) {
-  const variables = {
+/**
+ * Prepare GraphQL query variables for the PR status query
+ * @param {Object} context - GitHub Actions context
+ * @param {string} prNumber - Pull request number
+ * @returns {Object} GraphQL query variables
+ */
+function prepareQueryVariables(context, prNumber) {
+  return {
     owner: context.repo.owner,
     name: context.repo.repo,
     number: parseInt(prNumber),
@@ -33879,56 +33884,75 @@ async function status_status(octokit, context, prNumber, data) {
       Accept: 'application/vnd.github.merge-info-preview+json'
     }
   }
+}
 
-  // Get the checks to exclude from status evaluation
+/**
+ * Prepare the list of checks to exclude from evaluation
+ * @param {Object} data - Data object containing exclude checks and workflow info
+ * @returns {Array} Array of check names to exclude
+ */
+function prepareExcludeChecks(data) {
   const excludeChecks = data.excludeChecks || []
   const currentActionName = data.workflow || 'pr-status'
 
-  // Combine default exclusions with user-provided exclusions
   const checksToExclude = [...excludeChecks, currentActionName].filter(Boolean)
-  core.info(
-    `Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
-  )
-
-  // Make the GraphQL query
-  const result = await octokit.graphql(PR_STATUS_QUERY, variables)
-
-  let commitStatus = null
-  try {
-    // If there are no CI checks defined at all, we can set the commitStatus to null
-    if (
-      result.repository.pullRequest.commits.nodes[0].commit.checkSuites
-        .totalCount === 0
-    ) {
-      core.info('💡 no CI checks have been defined for this pull request')
-      commitStatus = null
-    } else if (data.checks === CHECK_TYPES.REQUIRED) {
-      // Process required checks only
-      commitStatus = processRequiredChecks(result, checksToExclude)
-    } else {
-      // Process all checks
-      commitStatus = processAllChecks(result, checksToExclude)
-    }
-  } catch (e) {
+  if (checksToExclude.length > 0) {
     core.info(
-      `could not retrieve PR commit status: ${e} - Handled: ${COLORS.success}OK`
+      `🚫 Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
     )
-    core.info('this repo may not have any CI checks defined')
-    core.info('skipping commit status check and proceeding...')
-    commitStatus = null
+  }
+
+  return checksToExclude
+}
+
+/**
+ * Determine commit status based on GraphQL result and check type
+ * @param {Object} result - GraphQL query result
+ * @param {Object} data - Data object containing checks configuration
+ * @param {Array} checksToExclude - Array of check names to exclude
+ * @returns {string|null} Commit status or null
+ */
+function determineCommitStatus(result, data, checksToExclude) {
+  try {
+    const checkSuites =
+      result.repository.pullRequest.commits.nodes[0].commit.checkSuites
+
+    // If there are no CI checks defined at all, return null
+    if (checkSuites.totalCount === 0) {
+      core.info('💡 No CI checks have been defined for this pull request')
+      return null
+    }
+
+    // Process checks based on type
+    if (data.checks === CHECK_TYPES.REQUIRED) {
+      return processRequiredChecks(result, checksToExclude)
+    } else {
+      return processAllChecks(result, checksToExclude)
+    }
+  } catch (error) {
+    core.warning(`⚠️ Could not retrieve PR commit status: ${error.message}`)
+    core.info('💡 This repo may not have any CI checks defined')
+    core.info('🔄 Skipping commit status check and proceeding...')
 
     // Try to display the raw GraphQL result for debugging purposes
     try {
-      core.debug('raw graphql result for debugging:')
-      core.debug(result)
-    } catch {
-      // istanbul ignore next
-      core.debug(
-        'Could not output raw graphql result for debugging - This is bad'
-      )
+      core.debug('🔍 Raw GraphQL result for debugging:')
+      core.debug(JSON.stringify(result, null, 2))
+    } catch (debugError) {
+      core.debug('❌ Could not output raw GraphQL result for debugging')
     }
-  }
 
+    return null
+  }
+}
+
+/**
+ * Extract status result from GraphQL response
+ * @param {Object} result - GraphQL query result
+ * @param {string|null} commitStatus - Determined commit status
+ * @returns {Object} Status result object
+ */
+function extractStatusResult(result, commitStatus) {
   const statusResult = {
     review_decision: result?.repository?.pullRequest?.reviewDecision || null,
     total_approvals:
@@ -33938,43 +33962,83 @@ async function status_status(octokit, context, prNumber, data) {
     commit_status: commitStatus || null
   }
 
-  core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)
-
+  core.debug(`📊 Status result: ${JSON.stringify(statusResult, null, 2)}`)
   return statusResult
+}
+
+/**
+ * Get the status of a pull request from multiple perspectives
+ * @param {Object} octokit - The octokit client
+ * @param {Object} context - The GitHub Actions event context
+ * @param {string} prNumber - The pull request number
+ * @param {Object} data - An object containing the checks parameter and other data
+ * @returns {Object} An object containing the review_decision, merge_state_status, and commit_status
+ */
+async function status_status(octokit, context, prNumber, data) {
+  try {
+    core.info('🔍 Fetching pull request status information...')
+
+    // Prepare query variables and exclusions
+    const variables = prepareQueryVariables(context, prNumber)
+    const checksToExclude = prepareExcludeChecks(data)
+
+    // Make the GraphQL query
+    const result = await octokit.graphql(PR_STATUS_QUERY, variables)
+
+    // Determine commit status
+    const commitStatus = determineCommitStatus(result, data, checksToExclude)
+
+    // Extract and return the status result
+    return extractStatusResult(result, commitStatus)
+  } catch (error) {
+    core.error(`❌ Failed to fetch PR status: ${error.message}`)
+    core.debug(`🔍 Error details: ${error.stack}`)
+    throw error
+  }
 }
 
 ;// CONCATENATED MODULE: ./src/functions/outputs.js
 
 
 
-// Helper function for setting GitHub Actions outputs
-// :param status: The object containing the relevant status information
-// :param data: The object containing the relevant data information
-// :return: nothing
+/**
+ * Set GitHub Actions outputs and evaluate criteria
+ * @param {Object} status - The object containing the relevant status information
+ * @param {Object} data - The object containing the relevant data information
+ * @returns {boolean} Whether all evaluation criteria pass
+ */
 function outputs(status, data) {
-  // set the outputs
+  core.debug('📊 Setting GitHub Actions outputs...')
+
+  // Set the outputs
   core.setOutput('review_decision', status.review_decision || null)
   core.setOutput('total_approvals', status.total_approvals || 0)
   core.setOutput('merge_state_status', status.merge_state_status || null)
   core.setOutput('commit_status', status.commit_status || null)
 
-  // set the approved output depending on the review decision
+  // Set the approved output depending on the review decision
   if (status.review_decision === REVIEW_DECISION.APPROVED) {
     core.setOutput('approved', 'true')
   } else if (status.review_decision === null) {
     core.info(
-      'PR has no approval requirements so it is technically considered approved'
+      '💡 PR has no approval requirements so it is technically considered approved'
     )
     core.setOutput('approved', 'true')
   } else {
     core.setOutput('approved', 'false')
   }
 
-  // set the evaluation output depending on the input criteria
-  // if no evaluations were provided, set the output to null
+  // Set the evaluation output depending on the input criteria
   if (data.evaluations.length === 0) {
-    core.setOutput('evaluation', null)
+    core.info('💡 No evaluation criteria provided')
+    core.setOutput('evaluation', EVALUATION_RESULT.PASS)
+    core.info(`📊 Evaluation result: PASS ✅`)
+    return true // Default to pass when no criteria
   }
+
+  core.info(
+    `🔍 Evaluating ${data.evaluations.length} criteria: ${data.evaluations.join(', ')}`
+  )
 
   /**
    * Parse and validate min_approvals evaluation criteria
@@ -34008,13 +34072,15 @@ function outputs(status, data) {
         status.review_decision !== REVIEW_DECISION.APPROVED &&
         status.review_decision !== null
       ) {
-        core.warning(`evaluation '${evaluation}' failed - PR is not approved`)
+        core.warning(
+          `⚠️ Evaluation '${evaluation}' failed - PR is not approved`
+        )
         return false
       }
     } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
       if (status.merge_state_status !== 'CLEAN') {
         core.warning(
-          `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
+          `⚠️ Evaluation '${evaluation}' failed - PR is not cleanly mergeable`
         )
         return false
       }
@@ -34024,7 +34090,7 @@ function outputs(status, data) {
         status.commit_status !== null
       ) {
         core.warning(
-          `evaluation '${evaluation}' failed - commit status is not successful`
+          `⚠️ Evaluation '${evaluation}' failed - commit status is not successful`
         )
         return false
       }
@@ -34033,17 +34099,17 @@ function outputs(status, data) {
         const minApprovals = parseMinApprovals(evaluation)
         if (status.total_approvals < minApprovals) {
           core.warning(
-            `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
+            `⚠️ Evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals`
           )
           return false
         }
       } catch (error) {
-        core.warning(`evaluation '${evaluation}' failed - ${error.message}`)
+        core.warning(`⚠️ Evaluation '${evaluation}' failed - ${error.message}`)
         return false
       }
     } else {
       core.warning(
-        `evaluation '${evaluation}' failed - unknown evaluation criteria`
+        `⚠️ Evaluation '${evaluation}' failed - unknown evaluation criteria`
       )
       return false
     }
@@ -34051,7 +34117,7 @@ function outputs(status, data) {
     return true
   }
 
-  // iterate over all the evaluations and check them
+  // Iterate over all the evaluations and check them
   let pass = true
   data.evaluations.forEach(evaluation => {
     if (!evaluateCriteria(evaluation, status)) {
@@ -34063,7 +34129,6 @@ function outputs(status, data) {
     'evaluation',
     pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
   )
-  core.info(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass
 }
@@ -34116,13 +34181,15 @@ function stringToArray(string) {
 ;// CONCATENATED MODULE: ./src/functions/label.js
 
 
-// Helper function to add labels to a pull request
-// :param issueNumber: The issue number to add the labels to
-// :param context: The GitHub Actions event context
-// :param octokit: The octokit client
-// :param labelsToAdd: An array of labels to add to the pull request (Array)
-// :parm labelsToRemove: An array of labels to remove from the pull request (Array)
-// :returns: An object containing the labels added and removed (Object)
+/**
+ * Add and remove labels from a pull request
+ * @param {string} issueNumber - The issue number to add the labels to
+ * @param {Object} context - The GitHub Actions event context
+ * @param {Object} octokit - The octokit client
+ * @param {Array} labelsToAdd - An array of labels to add to the pull request
+ * @param {Array} labelsToRemove - An array of labels to remove from the pull request
+ * @returns {Object} An object containing the labels added and removed
+ */
 async function label(
   issueNumber,
   context,
@@ -34130,63 +34197,72 @@ async function label(
   labelsToAdd,
   labelsToRemove
 ) {
-  // Get the owner, repo, and issue number from the context
   const {owner, repo} = context.repo
-  var addedLabels = [] // an array of labels that were actually added
-  var removedLabels = [] // an array of labels that were actually removed
+  const addedLabels = [] // an array of labels that were actually added
+  const removedLabels = [] // an array of labels that were actually removed
 
-  // exit early if there are no labels to add or remove
+  // Exit early if there are no labels to add or remove
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
-    core.info('🏷️ no labels to add or remove')
+    core.info('🏷️ No labels to add or remove')
     return {
       added: [],
       removed: []
     }
   }
 
-  // first, find and cleanup labelsToRemove if any are provided
+  core.info(`🏷️ Processing labels for PR #${issueNumber}`)
+
+  // First, find and cleanup labelsToRemove if any are provided
   if (labelsToRemove.length > 0) {
-    // Fetch current labels on the issue
-    core.debug('fetching current labels on the issue')
-    const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
-      owner: owner,
-      repo: repo,
-      issue_number: issueNumber
-    })
-    const currentLabels = currentLabelsResult.data.map(label => label.name)
+    core.debug('🔍 Fetching current labels on the issue')
 
-    core.info(`current labels: ${currentLabels}`)
-    core.info(`labels to remove: ${labelsToRemove}`)
+    try {
+      const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
+        owner: owner,
+        repo: repo,
+        issue_number: issueNumber
+      })
+      const currentLabels = currentLabelsResult.data.map(label => label.name)
 
-    // Remove unwanted labels
-    for (const label of labelsToRemove) {
-      if (currentLabels.includes(label)) {
-        await octokit.rest.issues.removeLabel({
-          owner: owner,
-          repo: repo,
-          issue_number: issueNumber,
-          name: label
-        })
-        core.info(`🏷️ label removed: ${label}`)
-        removedLabels.push(label)
-      } else {
-        core.info(`🏷️ label not found: '${label}' so it was not removed`)
+      core.debug(`📋 Current labels: ${currentLabels.join(', ')}`)
+      core.debug(`❌ Labels to remove: ${labelsToRemove.join(', ')}`)
+
+      // Remove unwanted labels
+      for (const label of labelsToRemove) {
+        if (currentLabels.includes(label)) {
+          await octokit.rest.issues.removeLabel({
+            owner: owner,
+            repo: repo,
+            issue_number: issueNumber,
+            name: label
+          })
+          core.info(`🏷️ ❌ Label removed: ${label}`)
+          removedLabels.push(label)
+        } else {
+          core.info(`🏷️ ⚠️ Label not found: '${label}' so it was not removed`)
+        }
       }
+    } catch (error) {
+      core.warning(`⚠️ Failed to process label removal: ${error.message}`)
     }
   }
 
-  // now, add the labels if any are provided
+  // Now, add the labels if any are provided
   if (labelsToAdd.length > 0) {
-    core.debug(`attempting to apply labels: ${labelsToAdd}`)
-    await octokit.rest.issues.addLabels({
-      owner: owner,
-      repo: repo,
-      issue_number: issueNumber,
-      labels: labelsToAdd
-    })
-    core.info(`🏷️ labels added: ${labelsToAdd}`)
+    core.debug(`🔍 Attempting to apply labels: ${labelsToAdd.join(', ')}`)
 
-    addedLabels = labelsToAdd
+    try {
+      await octokit.rest.issues.addLabels({
+        owner: owner,
+        repo: repo,
+        issue_number: issueNumber,
+        labels: labelsToAdd
+      })
+      core.info(`🏷️ ✅ Labels added: ${labelsToAdd.join(', ')}`)
+      addedLabels.push(...labelsToAdd)
+    } catch (error) {
+      core.warning(`⚠️ Failed to add labels: ${error.message}`)
+    }
   }
 
   return {
@@ -34206,6 +34282,70 @@ async function label(
 
 
 
+
+/**
+ * Parse and validate input parameters from GitHub Actions
+ * @returns {Object} Parsed input parameters
+ */
+function parseInputs() {
+  const inputs = {
+    token: core.getInput('github_token', {required: true}),
+    workflow: core.getInput('workflow', {required: false}) || github.context.workflow,
+    checks: core.getInput('checks', {required: true}),
+    evaluations: stringToArray(core.getInput('evaluations', {required: true})),
+    passLabels: stringToArray(core.getInput('pass_labels', {required: false})),
+    passLabelsCleanup: stringToArray(
+      core.getInput('pass_labels_cleanup', {required: false})
+    ),
+    failLabels: stringToArray(core.getInput('fail_labels', {required: false})),
+    excludeChecks: stringToArray(
+      core.getInput('exclude_checks', {required: false})
+    ),
+    prNumber:
+      core.getInput('pr_number', {required: false}) ||
+      github.context.issue?.number ||
+      github.context.payload?.pull_request?.number
+  }
+
+  // Validate PR number
+  if (!inputs.prNumber) {
+    throw new Error('❌ Pull request number not found in context or inputs')
+  }
+
+  core.debug(`📋 Parsed inputs: ${JSON.stringify(inputs, null, 2)}`)
+  return inputs
+}
+
+/**
+ * Create and configure the Octokit client
+ * @param {string} token - GitHub token for authentication
+ * @returns {Object} Configured Octokit client
+ */
+function createOctokitClient(token) {
+  return github.getOctokit(token, {
+    userAgent: `grantbirki/pr-status@${VERSION}`,
+    additionalPlugins: [dist_node.octokitRetry]
+  })
+}
+
+/**
+ * Log the label actions that will be performed
+ * @param {Array} labelsToAdd - Labels to add
+ * @param {Array} labelsToRemove - Labels to remove
+ */
+function logLabelActions(labelsToAdd, labelsToRemove) {
+  if (labelsToAdd.length > 0) {
+    core.info(`🏷️ Labels to add: ${labelsToAdd.join(', ')}`)
+  }
+
+  if (labelsToRemove.length > 0) {
+    core.info(`🏷️ Labels to remove: ${labelsToRemove.join(', ')}`)
+  }
+
+  if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
+    core.info('🏷️ No label changes needed')
+  }
+}
 
 /**
  * Determine labels to add and remove based on evaluation result
@@ -34234,89 +34374,62 @@ function determineLabelActions(
   }
 }
 
+/**
+ * Main function that orchestrates the PR status workflow
+ * @returns {string} 'success' if the workflow completes successfully
+ */
 async function run() {
   try {
-    core.info(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
+    core.info(`🚀 ${COLORS.highlight}PR Status Action starting${COLORS.reset}`)
 
-    // for debugging, dump the context object
-    core.debug(`context: ${JSON.stringify(github.context, null, 2)}`)
+    // Parse and validate inputs
+    const inputs = parseInputs()
+    core.info(`🔍 Evaluating PR #${inputs.prNumber}`)
 
-    // get the inputs
-    const token = core.getInput('github_token', {required: true})
-    const workflow =
-      core.getInput('workflow', {required: false}) || github.context.workflow
-    const checks = core.getInput('checks', {required: true})
-    const evaluations = stringToArray(
-      core.getInput('evaluations', {required: true})
-    )
-    const passLabels = stringToArray(
-      core.getInput('pass_labels', {required: false})
-    )
-    const passLabelsCleanup = stringToArray(
-      core.getInput('pass_labels_cleanup', {required: false})
-    )
-    const failLabels = stringToArray(
-      core.getInput('fail_labels', {required: false})
-    )
-    const excludeChecks = stringToArray(
-      core.getInput('exclude_checks', {required: false})
-    )
-    const prNumber =
-      core.getInput('pr_number', {required: false}) ||
-      github.context.issue.number ||
-      github.context.payload.pull_request.number
-    if (!prNumber) {
-      /* istanbul ignore next */
-      throw new Error(
-        'pull request number not found in context or inputs, exiting'
-      )
-    }
+    // Create Octokit client
+    const octokit = createOctokitClient(inputs.token)
 
-    // create an octokit client with the retry plugin
-    const octokit = github.getOctokit(token, {
-      userAgent: `grantbirki/pr-status@${VERSION}`,
-      additionalPlugins: [dist_node.octokitRetry]
-    })
-
+    // Prepare data for status evaluation
     const data = {
-      checks: checks,
-      prNumber: prNumber,
-      evaluations: evaluations,
-      excludeChecks: excludeChecks,
-      workflow: workflow
+      checks: inputs.checks,
+      prNumber: inputs.prNumber,
+      evaluations: inputs.evaluations,
+      excludeChecks: inputs.excludeChecks,
+      workflow: inputs.workflow
     }
 
-    // get the status of the pull request
+    // Get PR status information
     core.info(
-      `🏃 running status checks on pull request ${COLORS.highlight}${prNumber}${COLORS.reset}`
+      `🏃 Running status checks on pull request ${COLORS.highlight}${inputs.prNumber}${COLORS.reset}`
     )
-    const statusResult = await status_status(octokit, github.context, prNumber, data)
+    const statusResult = await status_status(octokit, github.context, inputs.prNumber, data)
 
-    // set the outputs
+    // Evaluate the status and set outputs
     const pass = outputs(statusResult, data)
-    core.info(`pass: ${pass}`)
+    core.info(`📊 Evaluation result: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
-    // determine labels to add and remove based on evaluation result
+    // Determine and apply label changes
     const {labelsToAdd, labelsToRemove} = determineLabelActions(
       pass,
-      passLabels,
-      failLabels,
-      passLabelsCleanup
+      inputs.passLabels,
+      inputs.failLabels,
+      inputs.passLabelsCleanup
     )
 
-    core.info(`labelsToAdd: ${labelsToAdd}`)
-    core.info(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
-    core.info(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
-    core.info(`labelsToRemove: ${labelsToRemove}`)
+    logLabelActions(labelsToAdd, labelsToRemove)
+    await label(inputs.prNumber, github.context, octokit, labelsToAdd, labelsToRemove)
 
-    await label(prNumber, github.context, octokit, labelsToAdd, labelsToRemove)
-
+    core.info(
+      `✅ ${COLORS.success}PR Status Action completed successfully${COLORS.reset}`
+    )
     return 'success'
   } catch (error) {
-    /* istanbul ignore next */
-    core.error(error.stack)
-    /* istanbul ignore next */
+    core.error(
+      `❌ ${COLORS.error}PR Status Action failed: ${error.message}${COLORS.reset}`
+    )
+    core.debug(`🔍 Error details: ${error.stack}`)
     core.setFailed(error.message)
+    throw error
   }
 }
 

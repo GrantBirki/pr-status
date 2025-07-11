@@ -1,7 +1,7 @@
 import {run} from '../src/main'
 import * as github from '@actions/github'
 import * as core from '@actions/core'
-import {COLORS} from '../src/functions/colors'
+// import {COLORS} from '../src/functions/colors'
 import * as status from '../src/functions/status'
 import * as label from '../src/functions/label'
 import * as outputs from '../src/functions/outputs'
@@ -9,7 +9,7 @@ import * as outputs from '../src/functions/outputs'
 // const setOutputMock = jest.spyOn(core, 'setOutput')
 // const saveStateMock = jest.spyOn(core, 'saveState')
 // const setFailedMock = jest.spyOn(core, 'setFailed')
-const infoMock = jest.spyOn(core, 'info')
+// const infoMock = jest.spyOn(core, 'info')
 // const debugMock = jest.spyOn(core, 'debug')
 
 const prNumber = '123'
@@ -61,16 +61,35 @@ describe('main', () => {
 
   test('successfully runs the action', async () => {
     expect(await run()).toBe('success')
-    expect(infoMock).toHaveBeenCalledWith(
-      `🏃 running status checks on pull request ${COLORS.highlight}${prNumber}${COLORS.reset}`
+
+    // Verify the core functions were called with correct parameters
+    expect(status.status).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      prNumber,
+      expect.objectContaining({
+        checks: 'all',
+        prNumber: prNumber,
+        evaluations: ['APPROVED']
+      })
     )
-    expect(infoMock).toHaveBeenCalledWith(`pass: true`)
-    expect(infoMock).toHaveBeenCalledWith(`labelsToAdd: ready-for-deployment`)
-    expect(infoMock).toHaveBeenCalledWith(`labelsToAdd isArray: true`)
-    expect(infoMock).toHaveBeenCalledWith(
-      `labelsToRemove: needs-review,needs-review`
+
+    expect(outputs.outputs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        review_decision: 'APPROVED',
+        merge_state_status: 'CLEAN',
+        commit_status: 'SUCCESS'
+      }),
+      expect.anything()
     )
-    expect(infoMock).toHaveBeenCalledWith(`labelsToRemove isArray: true`)
+
+    expect(label.label).toHaveBeenCalledWith(
+      prNumber,
+      expect.anything(),
+      expect.anything(),
+      ['ready-for-deployment'],
+      ['needs-review', 'needs-review']
+    )
   })
 
   test('runs the action when the PR is not in a "pass" state', async () => {
@@ -79,10 +98,15 @@ describe('main', () => {
     })
 
     expect(await run()).toBe('success')
-    expect(infoMock).toHaveBeenCalledWith(
-      `🏃 running status checks on pull request ${COLORS.highlight}${prNumber}${COLORS.reset}`
+
+    // Verify that label function was called with fail labels
+    expect(label.label).toHaveBeenCalledWith(
+      prNumber,
+      expect.anything(),
+      expect.anything(),
+      ['needs-review'], // fail labels to add
+      ['ready-for-deployment'] // pass labels to remove
     )
-    expect(infoMock).toHaveBeenCalledWith(`pass: false`)
   })
 
   test('should handle context fallback for pr number', async () => {
@@ -121,6 +145,50 @@ describe('main', () => {
       expect.anything(),
       ['needs-review'], // fail labels to add
       ['ready-for-deployment'] // pass labels to remove
+    )
+  })
+
+  test('should handle missing PR number gracefully', async () => {
+    // Remove PR number from input
+    delete process.env.INPUT_PR_NUMBER
+
+    // Mock the context to not have PR number in payload either
+    const originalPayload = github.context.payload
+    github.context.payload = {}
+
+    try {
+      await expect(run()).rejects.toThrow()
+    } finally {
+      // Restore for other tests
+      github.context.payload = originalPayload
+      process.env.INPUT_PR_NUMBER = prNumber
+    }
+  })
+
+  test('should handle errors gracefully', async () => {
+    // Mock status function to throw an error
+    jest.spyOn(status, 'status').mockImplementation(() => {
+      throw new Error('GraphQL error')
+    })
+
+    await expect(run()).rejects.toThrow('GraphQL error')
+  })
+
+  test('should handle empty label arrays', async () => {
+    // Set up empty label arrays
+    process.env.INPUT_PASS_LABELS = ''
+    process.env.INPUT_FAIL_LABELS = ''
+    process.env.INPUT_PASS_LABELS_CLEANUP = ''
+
+    expect(await run()).toBe('success')
+
+    // Verify that label function was called with empty arrays
+    expect(label.label).toHaveBeenCalledWith(
+      prNumber,
+      expect.anything(),
+      expect.anything(),
+      [], // empty pass labels
+      [] // empty fail labels
     )
   })
 })
