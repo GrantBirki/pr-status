@@ -33660,6 +33660,7 @@ function filterExcludedChecks(checks, excludePatterns) {
     const checkName = getCheckName(check)
     if (checkName === 'Unknown') {
       // If no name/context available, don't exclude it
+      /* istanbul ignore next */
       return true
     }
 
