@@ -134,7 +134,6 @@ export function outputs(status, data) {
     'evaluation',
     pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
   )
-  core.info(`📊 Evaluation result: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass
 }

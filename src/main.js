@@ -132,8 +132,7 @@ export async function run() {
 
     // Evaluate the status and set outputs
     const pass = outputs(statusResult, data)
-    const passStatus = pass ? '✅ PASS' : '❌ FAIL'
-    core.info(`📊 Evaluation result: ${passStatus}`)
+    core.info(`📊 Evaluation result: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
     // Determine and apply label changes
     const {labelsToAdd, labelsToRemove} = determineLabelActions(
