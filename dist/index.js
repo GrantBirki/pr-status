@@ -33531,7 +33531,7 @@ var github = __nccwpck_require__(3228);
 // - v1.1.1-rc.1
 // - etc
 
-const VERSION = 'v1.6.0'
+const VERSION = 'v1.7.0'
 
 // EXTERNAL MODULE: ./node_modules/@octokit/plugin-retry/dist-node/index.js
 var dist_node = __nccwpck_require__(3450);
