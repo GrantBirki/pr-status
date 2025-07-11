@@ -34041,6 +34041,7 @@ function outputs(status, data) {
   core.setOutput('total_approvals', status.total_approvals || 0)
   core.setOutput('merge_state_status', status.merge_state_status || null)
   core.setOutput('commit_status', status.commit_status || null)
+  core.setOutput('mergeable_state', status.mergeable_state || null)
 
   // Set the approved output depending on the review decision
   if (status.review_decision === REVIEW_DECISION.APPROVED) {
@@ -34104,9 +34105,9 @@ function outputs(status, data) {
         return false
       }
     } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
-      if (status.merge_state_status !== 'CLEAN') {
+      if (status.mergeable_state !== 'MERGEABLE') {
         core.warning(
-          `⚠️ Evaluation '${evaluation}' failed - PR is not cleanly mergeable`
+          `⚠️ Evaluation '${evaluation}' failed - PR is not in a mergeable state`
         )
         return false
       }
