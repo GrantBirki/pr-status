@@ -33,3 +33,24 @@ test('successfully converts an empty string to an empty array', async () => {
 test('successfully converts garbage to an empty array', async () => {
   expect(stringToArray(',,,')).toStrictEqual([])
 })
+
+test('handles null input gracefully', async () => {
+  expect(stringToArray(null)).toStrictEqual([])
+  expect(debugMock).toHaveBeenCalledWith(
+    'in stringToArray(), invalid input was found so an empty Array was returned'
+  )
+})
+
+test('handles undefined input gracefully', async () => {
+  expect(stringToArray(undefined)).toStrictEqual([])
+  expect(debugMock).toHaveBeenCalledWith(
+    'in stringToArray(), invalid input was found so an empty Array was returned'
+  )
+})
+
+test('handles non-string input gracefully', async () => {
+  expect(stringToArray(123)).toStrictEqual([])
+  expect(debugMock).toHaveBeenCalledWith(
+    'in stringToArray(), invalid input was found so an empty Array was returned'
+  )
+})

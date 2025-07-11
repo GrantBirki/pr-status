@@ -9,6 +9,28 @@ import {outputs} from './functions/outputs'
 import {stringToArray} from './functions/string-to-array'
 import {label} from './functions/label'
 
+/**
+ * Determine labels to add and remove based on evaluation result
+ * @param {boolean} pass - Whether the evaluation passed
+ * @param {Array} passLabels - Labels to add when passing
+ * @param {Array} failLabels - Labels to add when failing
+ * @param {Array} passLabelsCleanup - Labels to remove when passing
+ * @returns {Object} Object with labelsToAdd and labelsToRemove arrays
+ */
+function determineLabelActions(pass, passLabels, failLabels, passLabelsCleanup) {
+  if (pass) {
+    return {
+      labelsToAdd: passLabels,
+      labelsToRemove: failLabels.concat(passLabelsCleanup)
+    }
+  } else {
+    return {
+      labelsToAdd: failLabels,
+      labelsToRemove: passLabels
+    }
+  }
+}
+
 export async function run() {
   try {
     core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
@@ -71,22 +93,20 @@ export async function run() {
     const pass = outputs(statusResult, data)
     core.debug(`pass: ${pass}`)
 
-    // conditionally set the labels to add or remove
-    if (pass === true) {
-      // in this case, the labels to add are just the passing labels
-      let labelsToAdd = passLabels
-      // the labels to remove are the failing labels and the cleanup labels
-      let labelsToRemove = failLabels.concat(passLabelsCleanup)
+    // determine labels to add and remove based on evaluation result
+    const {labelsToAdd, labelsToRemove} = determineLabelActions(
+      pass,
+      passLabels,
+      failLabels,
+      passLabelsCleanup
+    )
 
-      core.debug(`labelsToAdd: ${labelsToAdd}`)
-      core.debug(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
-      core.debug(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
-      core.debug(`labelsToRemove: ${labelsToRemove}`)
+    core.debug(`labelsToAdd: ${labelsToAdd}`)
+    core.debug(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
+    core.debug(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
+    core.debug(`labelsToRemove: ${labelsToRemove}`)
 
-      await label(prNumber, context, octokit, labelsToAdd, labelsToRemove)
-    } else {
-      await label(prNumber, context, octokit, failLabels, passLabels)
-    }
+    await label(prNumber, context, octokit, labelsToAdd, labelsToRemove)
 
     return 'success'
   } catch (error) {
