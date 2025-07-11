@@ -37,6 +37,7 @@ Depending on the inputs provided, this Action will check the "status" of a pull 
 | `total_approvals` | The total number of approvals on the pull request |
 | `review_decision` | The decision of the pull request review status - Examples: `"APPROVED"`, `"CHANGES_REQUESTED"`, `"REVIEW_REQUIRED"`, `null`, etc |
 | `merge_state_status` | The status of the pull request merge state - Examples: `"CLEAN"`, `"DIRTY"`, `"UNKNOWN"`, `"DRAFT"`, `"BLOCKED"`, etc |
+| `mergeable_state` | The mergeable state of the pull request - Examples: `"MERGEABLE"`, `"UNSTABLE"`, `"CONFLICTING"`, `"UNKNOWN"`, etc |
 | `commit_status` | The ci status for the latest commit on the pull request - Examples: `"SUCCESS"`, `"FAILURE"`, `"PENDING"`, `null`, etc |
 | `evaluation` | The overall evaluation of the pull request based on the `evaluations` input - Examples: `"PASS"`, `"FAIL"` |
 
