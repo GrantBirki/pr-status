@@ -39,7 +39,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -107,7 +107,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -250,7 +250,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           }
@@ -275,7 +275,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -342,7 +342,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -409,7 +409,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -470,7 +470,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -525,7 +525,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -587,7 +587,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -668,7 +668,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -718,7 +718,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -773,7 +773,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -831,7 +831,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -885,7 +885,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -946,7 +946,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
@@ -1006,7 +1006,7 @@ describe('status function', () => {
         pullRequest: {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
-          mergeableState: 'MERGEABLE',
+          mergeable: 'MERGEABLE',
           reviews: {
             totalCount: 1
           },
