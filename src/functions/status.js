@@ -1,6 +1,138 @@
 import * as core from '@actions/core'
 import {COLORS} from './colors'
 
+/**
+ * Get the name of a check from either CheckRun or StatusContext node
+ * @param {Object} check - The check object (CheckRun or StatusContext)
+ * @returns {string} The check name
+ */
+function getCheckName(check) {
+  return check.name || check.context || 'Unknown'
+}
+
+/**
+ * Get the status of a check from either CheckRun or StatusContext node
+ * @param {Object} check - The check object (CheckRun or StatusContext)
+ * @returns {string} The check status in uppercase
+ */
+function getCheckStatus(check) {
+  return (check.conclusion || check.state || 'UNKNOWN').toUpperCase()
+}
+
+/**
+ * Check if a status is considered successful
+ * @param {string} status - The status to check
+ * @returns {boolean} True if successful
+ */
+function isSuccessfulStatus(status) {
+  return ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(status)
+}
+
+/**
+ * Log all available checks for debugging purposes
+ * @param {Array} checks - Array of check objects
+ */
+function logAllChecks(checks) {
+  core.info(`📋 Found ${checks.length} total CI checks on this pull request`)
+  checks.forEach(check => {
+    const checkName = getCheckName(check)
+    const isRequired = check.isRequired ? '(required)' : '(optional)'
+    const checkStatus = getCheckStatus(check)
+    core.info(`  - ${checkName} ${isRequired}: ${checkStatus}`)
+  })
+}
+
+/**
+ * Filter checks by excluding specified patterns using exact matching
+ * @param {Array} checks - Array of check objects
+ * @param {Array} excludePatterns - Array of patterns to exclude
+ * @returns {Array} Filtered array of checks
+ */
+function filterExcludedChecks(checks, excludePatterns) {
+  return checks.filter(check => {
+    const checkName = getCheckName(check)
+    if (checkName === 'Unknown') {
+      // If no name/context available, don't exclude it
+      return true
+    }
+
+    const shouldExclude = excludePatterns.some(
+      excludePattern => checkName === excludePattern
+    )
+    if (shouldExclude) {
+      core.info(`Excluding check from status evaluation: ${checkName}`)
+    }
+    return !shouldExclude
+  })
+}
+
+/**
+ * Log the status of each check and return overall failure status
+ * @param {Array} checks - Array of check objects
+ * @param {string} checkType - Type of checks ('required' or 'all')
+ * @returns {boolean} True if any check is failing
+ */
+function logCheckResults(checks, checkType = 'check') {
+  let hasFailingCheck = false
+
+  checks.forEach(check => {
+    const checkName = getCheckName(check)
+    const checkStatus = getCheckStatus(check)
+    const isSuccessful = isSuccessfulStatus(checkStatus)
+
+    if (isSuccessful) {
+      const prefix = checkType === 'required' ? 'Required check' : 'Check'
+      core.info(`✅ ${prefix} '${checkName}': ${checkStatus}`)
+    } else {
+      const prefix = checkType === 'required' ? 'Required check' : 'Check'
+      core.info(`❌ ${prefix} '${checkName}': ${checkStatus} (FAILING)`)
+      hasFailingCheck = true
+    }
+  })
+
+  return hasFailingCheck
+}
+
+/**
+ * Evaluate if all checks are successful
+ * @param {Array} checks - Array of check objects
+ * @returns {boolean} True if all checks are successful
+ */
+function areAllChecksSuccessful(checks) {
+  return checks.every(check => {
+    const status = getCheckStatus(check)
+    return isSuccessfulStatus(status)
+  })
+}
+
+/**
+ * Log the overall status summary
+ * @param {boolean} hasFailures - Whether there are failing checks
+ * @param {string} checkType - Type of checks ('required' or 'all')
+ * @param {string} overallState - The overall state from GitHub (for 'all' mode)
+ */
+function logOverallStatus(hasFailures, checkType, overallState = null) {
+  if (hasFailures) {
+    if (checkType === 'required') {
+      core.info(
+        `🔴 Overall required checks status: FAILURE (one or more required checks failed)`
+      )
+    } else {
+      core.info(
+        `🔴 Overall CI status: ${overallState} (one or more checks failed)`
+      )
+    }
+  } else {
+    if (checkType === 'required') {
+      core.info(
+        `🟢 Overall required checks status: SUCCESS (all required checks passed)`
+      )
+    } else {
+      core.info(`🟢 Overall CI status: SUCCESS (all checks passed)`)
+    }
+  }
+}
+
 // Helper function to get the status of a pull request from multiple perspectives
 // :param octokit: The octokit client
 // :param context: The GitHub Actions event context
@@ -26,6 +158,12 @@ export async function status(octokit, context, prNumber, data) {
                     ... on CheckRun {
                       isRequired(pullRequestNumber:$number)
                       conclusion
+                      name
+                    }
+                    ... on StatusContext {
+                      isRequired(pullRequestNumber:$number)
+                      state
+                      context
                     }
                   }
                 }
@@ -49,6 +187,17 @@ export async function status(octokit, context, prNumber, data) {
       Accept: 'application/vnd.github.merge-info-preview+json'
     }
   }
+
+  // Get the checks to exclude from status evaluation
+  const excludeChecks = data.excludeChecks || []
+  const currentActionName = data.workflow || 'pr-status'
+
+  // Combine default exclusions with user-provided exclusions
+  const checksToExclude = [...excludeChecks, currentActionName].filter(Boolean)
+  core.info(
+    `Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
+  )
+
   // Make the GraphQL query
   const result = await octokit.graphql(query, variables)
 
@@ -64,41 +213,80 @@ export async function status(octokit, context, prNumber, data) {
 
       // If only the required checks need to pass
     } else if (data.checks === 'required') {
-      // https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks#check-statuses-and-conclusions
-      commitStatus =
-        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes
-          .filter(x => x.isRequired)
-          .reduce(
-            (acc, x) =>
-              acc &&
-              ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(
-                (x.conclusion || '').toUpperCase()
-              ),
-            true
-          )
-          ? 'SUCCESS'
-          : 'FAILURE'
+      // Log all available checks for debugging
+      const allChecks =
+        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+          .contexts.nodes
+      logAllChecks(allChecks)
+
+      // Filter to required checks only, then exclude specified checks
+      const requiredChecks = allChecks.filter(x => x.isRequired)
+      const filteredChecks = filterExcludedChecks(
+        requiredChecks,
+        checksToExclude
+      )
+
+      core.info(
+        `Evaluating ${filteredChecks.length} required checks (after exclusions)`
+      )
+
+      // Log the status of each required check and check for failures
+      const hasFailingCheck = logCheckResults(filteredChecks, 'required')
+
+      // Determine overall status
+      commitStatus = areAllChecksSuccessful(filteredChecks)
+        ? 'SUCCESS'
+        : 'FAILURE'
+
+      // Log overall status summary
+      logOverallStatus(hasFailingCheck, 'required')
 
       // If there are CI check defined, we need to check for the 'state' of the latest commit
-      // TODO: in the future, this might need to be refactored to look through all the checks individually
-      // and do a SUCCESS/FAILURE check just so that we are able to filter out "this" check. Meaning, that
-      // this current GitHub Action check does not fail the PR as it will always be in a running state
-      // at the time of the PR check
-      // For now, we will just use the state of the latest commit which will likely include the state of this check
-      // and that state will most likely be 'PENDING'. This only really matters if the context of this check (this action)
-      // is running on the commit that is being checked. So we should also do a check to see if this current action run's
-      // context is the same as the commit that is being checked for the commit status checks
+      // We'll filter out excluded checks from the overall state calculation too
     } else {
-      commitStatus =
+      // Log all available checks for debugging
+      const allChecks =
         result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-          .state
+          .contexts.nodes
+      logAllChecks(allChecks)
+
+      // Filter out excluded checks
+      const filteredChecks = filterExcludedChecks(allChecks, checksToExclude)
+
+      core.info(
+        `Evaluating ${filteredChecks.length} total checks (after exclusions)`
+      )
+
+      // If all other checks are successful, return SUCCESS, otherwise use the overall state
+      if (filteredChecks.length === 0) {
+        core.info(
+          '💡 no other CI checks found after filtering out excluded checks'
+        )
+        commitStatus = null
+      } else {
+        // Log the status of each check and check for failures
+        const hasFailingCheck = logCheckResults(filteredChecks, 'all')
+
+        // Determine overall status
+        const allSuccessful = areAllChecksSuccessful(filteredChecks)
+        commitStatus = allSuccessful
+          ? 'SUCCESS'
+          : result.repository.pullRequest.commits.nodes[0].commit
+              .statusCheckRollup.state
+
+        // Log overall status summary
+        const overallState =
+          result.repository.pullRequest.commits.nodes[0].commit
+            .statusCheckRollup.state
+        logOverallStatus(hasFailingCheck, 'all', overallState)
+      }
     }
   } catch (e) {
-    core.debug(
+    core.info(
       `could not retrieve PR commit status: ${e} - Handled: ${COLORS.success}OK`
     )
-    core.debug('this repo may not have any CI checks defined')
-    core.debug('skipping commit status check and proceeding...')
+    core.info('this repo may not have any CI checks defined')
+    core.info('skipping commit status check and proceeding...')
     commitStatus = null
 
     // Try to display the raw GraphQL result for debugging purposes
