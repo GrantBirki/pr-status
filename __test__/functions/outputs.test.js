@@ -191,4 +191,58 @@ describe('outputs function', () => {
       expect.stringContaining('unknown evaluation criteria')
     )
   })
+
+  test('should handle invalid min_approvals format', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS'
+    }
+    const data = {
+      evaluations: ['min_approvals_invalid']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid min_approvals format')
+    )
+  })
+
+  test('should handle invalid min_approvals value', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS'
+    }
+    const data = {
+      evaluations: ['min_approvals=invalid']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid min_approvals value')
+    )
+  })
+
+  test('should handle negative min_approvals value', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS'
+    }
+    const data = {
+      evaluations: ['min_approvals=-1']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid min_approvals value')
+    )
+  })
 })

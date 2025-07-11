@@ -1,4 +1,10 @@
 import * as core from '@actions/core'
+import {
+  REVIEW_DECISION,
+  EVALUATION_RESULT,
+  EVALUATION_CRITERIA,
+  PR_STATUS
+} from './constants'
 
 // Helper function for setting GitHub Actions outputs
 // :param status: The object containing the relevant status information
@@ -12,7 +18,7 @@ export function outputs(status, data) {
   core.setOutput('commit_status', status.commit_status || null)
 
   // set the approved output depending on the review decision
-  if (status.review_decision === 'APPROVED') {
+  if (status.review_decision === REVIEW_DECISION.APPROVED) {
     core.setOutput('approved', 'true')
   } else if (status.review_decision === null) {
     core.info(
@@ -29,51 +35,93 @@ export function outputs(status, data) {
     core.setOutput('evaluation', null)
   }
 
-  // iterate over all the evaluations and check them
-  var pass = true
-  data.evaluations.forEach(evaluation => {
-    if (evaluation === 'approved') {
+  /**
+   * Parse and validate min_approvals evaluation criteria
+   * @param {string} evaluation - The evaluation string (e.g., "min_approvals=2")
+   * @returns {number} The minimum number of approvals required
+   * @throws {Error} If the parsing fails or number is invalid
+   */
+  function parseMinApprovals(evaluation) {
+    const parts = evaluation.split('=')
+    if (parts.length !== 2) {
+      throw new Error(`Invalid min_approvals format: ${evaluation}`)
+    }
+
+    const minApprovals = parseInt(parts[1], 10)
+    if (isNaN(minApprovals) || minApprovals < 0) {
+      throw new Error(`Invalid min_approvals value: ${parts[1]}`)
+    }
+
+    return minApprovals
+  }
+
+  /**
+   * Evaluate a single evaluation criteria
+   * @param {string} evaluation - The evaluation criteria to check
+   * @param {Object} status - The status object containing PR information
+   * @returns {boolean} True if the evaluation passes, false otherwise
+   */
+  function evaluateCriteria(evaluation, status) {
+    if (evaluation === EVALUATION_CRITERIA.APPROVED) {
       if (
-        status.review_decision !== 'APPROVED' &&
+        status.review_decision !== REVIEW_DECISION.APPROVED &&
         status.review_decision !== null
       ) {
         core.warning(`evaluation '${evaluation}' failed - PR is not approved`)
-        pass = false
+        return false
       }
-    } else if (evaluation === 'mergeable') {
+    } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
       if (status.merge_state_status !== 'CLEAN') {
         core.warning(
           `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
         )
-        pass = false
+        return false
       }
-    } else if (evaluation === 'ci_passing') {
-      if (status.commit_status !== 'SUCCESS' && status.commit_status !== null) {
+    } else if (evaluation === EVALUATION_CRITERIA.CI_PASSING) {
+      if (
+        status.commit_status !== PR_STATUS.SUCCESS &&
+        status.commit_status !== null
+      ) {
         core.warning(
           `evaluation '${evaluation}' failed - commit status is not successful`
         )
-        pass = false
+        return false
       }
-    } else if (evaluation.includes('min_approvals')) {
-      // extract the number of approvals from the evaluation string
-      // e.g. "min_approvals=1" will extract 1
-      const minApprovals = parseInt(evaluation.split('=')[1])
-      if (status.total_approvals < minApprovals) {
-        // if the total approvals are less than the minimum required approvals, fail the evaluation
-        core.warning(
-          `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
-        )
-        pass = false
+    } else if (evaluation.includes(EVALUATION_CRITERIA.MIN_APPROVALS)) {
+      try {
+        const minApprovals = parseMinApprovals(evaluation)
+        if (status.total_approvals < minApprovals) {
+          core.warning(
+            `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
+          )
+          return false
+        }
+      } catch (error) {
+        core.warning(`evaluation '${evaluation}' failed - ${error.message}`)
+        return false
       }
     } else {
       core.warning(
         `evaluation '${evaluation}' failed - unknown evaluation criteria`
       )
+      return false
+    }
+
+    return true
+  }
+
+  // iterate over all the evaluations and check them
+  let pass = true
+  data.evaluations.forEach(evaluation => {
+    if (!evaluateCriteria(evaluation, status)) {
       pass = false
     }
   })
 
-  core.setOutput('evaluation', pass ? 'PASS' : 'FAIL')
+  core.setOutput(
+    'evaluation',
+    pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
+  )
   core.debug(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass

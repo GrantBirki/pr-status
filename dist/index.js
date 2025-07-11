@@ -33545,7 +33545,62 @@ const COLORS = {
   reset: '\u001b[0m' // reset
 }
 
+;// CONCATENATED MODULE: ./src/functions/constants.js
+// Constants for pull request status values
+const PR_STATUS = {
+  SUCCESS: 'SUCCESS',
+  FAILURE: 'FAILURE',
+  PENDING: 'PENDING',
+  UNKNOWN: 'UNKNOWN'
+}
+
+// Constants for review decision values
+const REVIEW_DECISION = {
+  APPROVED: 'APPROVED',
+  CHANGES_REQUESTED: 'CHANGES_REQUESTED',
+  REVIEW_REQUIRED: 'REVIEW_REQUIRED'
+}
+
+// Constants for merge state status values
+const MERGE_STATE = {
+  CLEAN: 'CLEAN',
+  DIRTY: 'DIRTY',
+  UNKNOWN: 'UNKNOWN',
+  DRAFT: 'DRAFT',
+  BLOCKED: 'BLOCKED'
+}
+
+// Constants for evaluation results
+const EVALUATION_RESULT = {
+  PASS: 'PASS',
+  FAIL: 'FAIL'
+}
+
+// Constants for check status values
+const CHECK_STATUS = {
+  SUCCESS: 'SUCCESS',
+  FAILURE: 'FAILURE',
+  PENDING: 'PENDING',
+  SKIPPED: 'SKIPPED',
+  NEUTRAL: 'NEUTRAL'
+}
+
+// Constants for evaluation criteria
+const EVALUATION_CRITERIA = {
+  APPROVED: 'approved',
+  MERGEABLE: 'mergeable',
+  CI_PASSING: 'ci_passing',
+  MIN_APPROVALS: 'min_approvals'
+}
+
+// Constants for check types
+const CHECK_TYPES = {
+  REQUIRED: 'required',
+  ALL: 'all'
+}
+
 ;// CONCATENATED MODULE: ./src/functions/status.js
+
 
 
 
@@ -33573,7 +33628,11 @@ function getCheckStatus(check) {
  * @returns {boolean} True if successful
  */
 function isSuccessfulStatus(status) {
-  return ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(status)
+  return [
+    CHECK_STATUS.SUCCESS,
+    CHECK_STATUS.SKIPPED,
+    CHECK_STATUS.NEUTRAL
+  ].includes(status)
 }
 
 /**
@@ -33601,6 +33660,7 @@ function filterExcludedChecks(checks, excludePatterns) {
     const checkName = getCheckName(check)
     if (checkName === 'Unknown') {
       // If no name/context available, don't exclude it
+      /* istanbul ignore next */
       return true
     }
 
@@ -33629,10 +33689,12 @@ function logCheckResults(checks, checkType = 'check') {
     const isSuccessful = isSuccessfulStatus(checkStatus)
 
     if (isSuccessful) {
-      const prefix = checkType === 'required' ? 'Required check' : 'Check'
+      const prefix =
+        checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
       core.info(`✅ ${prefix} '${checkName}': ${checkStatus}`)
     } else {
-      const prefix = checkType === 'required' ? 'Required check' : 'Check'
+      const prefix =
+        checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
       core.info(`❌ ${prefix} '${checkName}': ${checkStatus} (FAILING)`)
       hasFailingCheck = true
     }
@@ -33661,7 +33723,7 @@ function areAllChecksSuccessful(checks) {
  */
 function logOverallStatus(hasFailures, checkType, overallState = null) {
   if (hasFailures) {
-    if (checkType === 'required') {
+    if (checkType === CHECK_TYPES.REQUIRED) {
       core.info(
         `🔴 Overall required checks status: FAILURE (one or more required checks failed)`
       )
@@ -33671,7 +33733,7 @@ function logOverallStatus(hasFailures, checkType, overallState = null) {
       )
     }
   } else {
-    if (checkType === 'required') {
+    if (checkType === CHECK_TYPES.REQUIRED) {
       core.info(
         `🟢 Overall required checks status: SUCCESS (all required checks passed)`
       )
@@ -33681,6 +33743,127 @@ function logOverallStatus(hasFailures, checkType, overallState = null) {
   }
 }
 
+/**
+ * Process required checks and return commit status
+ * @param {Object} result - GraphQL result object
+ * @param {Array} checksToExclude - Array of check names to exclude
+ * @returns {string} The commit status
+ */
+function processRequiredChecks(result, checksToExclude) {
+  // Log all available checks for debugging
+  const allChecks =
+    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+      .contexts.nodes
+  logAllChecks(allChecks)
+
+  // Filter to required checks only, then exclude specified checks
+  const requiredChecks = allChecks.filter(x => x.isRequired)
+  const filteredChecks = filterExcludedChecks(requiredChecks, checksToExclude)
+
+  core.info(
+    `Evaluating ${filteredChecks.length} required checks (after exclusions)`
+  )
+
+  // Log the status of each required check and check for failures
+  const hasFailingCheck = logCheckResults(filteredChecks, CHECK_TYPES.REQUIRED)
+
+  // Determine overall status
+  const commitStatus = areAllChecksSuccessful(filteredChecks)
+    ? PR_STATUS.SUCCESS
+    : PR_STATUS.FAILURE
+
+  // Log overall status summary
+  logOverallStatus(hasFailingCheck, CHECK_TYPES.REQUIRED)
+
+  return commitStatus
+}
+
+/**
+ * Process all checks and return commit status
+ * @param {Object} result - GraphQL result object
+ * @param {Array} checksToExclude - Array of check names to exclude
+ * @returns {string} The commit status
+ */
+function processAllChecks(result, checksToExclude) {
+  // Log all available checks for debugging
+  const allChecks =
+    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+      .contexts.nodes
+  logAllChecks(allChecks)
+
+  // Filter out excluded checks
+  const filteredChecks = filterExcludedChecks(allChecks, checksToExclude)
+
+  core.info(
+    `Evaluating ${filteredChecks.length} total checks (after exclusions)`
+  )
+
+  // If all other checks are successful, return SUCCESS, otherwise use the overall state
+  if (filteredChecks.length === 0) {
+    core.info('💡 no other CI checks found after filtering out excluded checks')
+    return null
+  }
+
+  // Log the status of each check and check for failures
+  const hasFailingCheck = logCheckResults(filteredChecks, CHECK_TYPES.ALL)
+
+  // Determine overall status
+  const allSuccessful = areAllChecksSuccessful(filteredChecks)
+  const commitStatus = allSuccessful
+    ? PR_STATUS.SUCCESS
+    : result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+        .state
+
+  // Log overall status summary
+  const overallState =
+    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+      .state
+  logOverallStatus(hasFailingCheck, CHECK_TYPES.ALL, overallState)
+
+  return commitStatus
+}
+
+/**
+ * GraphQL query to get PR status information
+ */
+const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
+  repository(owner:$owner, name:$name) {
+    pullRequest(number:$number) {
+      reviewDecision
+      mergeStateStatus
+      commits(last: 1) {
+        nodes {
+          commit {
+            checkSuites {
+              totalCount
+            }
+            statusCheckRollup {
+              state
+              contexts(first:100) {
+                nodes {
+                  ... on CheckRun {
+                    isRequired(pullRequestNumber:$number)
+                    conclusion
+                    name
+                  }
+                  ... on StatusContext {
+                    isRequired(pullRequestNumber:$number)
+                    state
+                    context
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      reviews(states: APPROVED) {
+        totalCount
+      }
+    }
+  }
+}`
+
 // Helper function to get the status of a pull request from multiple perspectives
 // :param octokit: The octokit client
 // :param context: The GitHub Actions event context
@@ -33688,45 +33871,6 @@ function logOverallStatus(hasFailures, checkType, overallState = null) {
 // :param data: An object containing the checks parameter and other data
 // :return: An object containing the review_decision, merge_state_status, and commit_status
 async function status_status(octokit, context, prNumber, data) {
-  const query = `query($owner:String!, $name:String!, $number:Int!) {
-    repository(owner:$owner, name:$name) {
-      pullRequest(number:$number) {
-        reviewDecision
-        mergeStateStatus
-        commits(last: 1) {
-          nodes {
-            commit {
-              checkSuites {
-                totalCount
-              }
-              statusCheckRollup {
-                state
-                contexts(first:100) {
-                  nodes {
-                    ... on CheckRun {
-                      isRequired(pullRequestNumber:$number)
-                      conclusion
-                      name
-                    }
-                    ... on StatusContext {
-                      isRequired(pullRequestNumber:$number)
-                      state
-                      context
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        reviews(states: APPROVED) {
-          totalCount
-        }
-      }
-    }
-  }`
-
-  // Note: https://docs.github.com/en/graphql/overview/schema-previews#merge-info-preview (mergeStateStatus)
   const variables = {
     owner: context.repo.owner,
     name: context.repo.repo,
@@ -33747,9 +33891,9 @@ async function status_status(octokit, context, prNumber, data) {
   )
 
   // Make the GraphQL query
-  const result = await octokit.graphql(query, variables)
+  const result = await octokit.graphql(PR_STATUS_QUERY, variables)
 
-  var commitStatus = null
+  let commitStatus = null
   try {
     // If there are no CI checks defined at all, we can set the commitStatus to null
     if (
@@ -33758,76 +33902,12 @@ async function status_status(octokit, context, prNumber, data) {
     ) {
       core.info('💡 no CI checks have been defined for this pull request')
       commitStatus = null
-
-      // If only the required checks need to pass
-    } else if (data.checks === 'required') {
-      // Log all available checks for debugging
-      const allChecks =
-        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-          .contexts.nodes
-      logAllChecks(allChecks)
-
-      // Filter to required checks only, then exclude specified checks
-      const requiredChecks = allChecks.filter(x => x.isRequired)
-      const filteredChecks = filterExcludedChecks(
-        requiredChecks,
-        checksToExclude
-      )
-
-      core.info(
-        `Evaluating ${filteredChecks.length} required checks (after exclusions)`
-      )
-
-      // Log the status of each required check and check for failures
-      const hasFailingCheck = logCheckResults(filteredChecks, 'required')
-
-      // Determine overall status
-      commitStatus = areAllChecksSuccessful(filteredChecks)
-        ? 'SUCCESS'
-        : 'FAILURE'
-
-      // Log overall status summary
-      logOverallStatus(hasFailingCheck, 'required')
-
-      // If there are CI check defined, we need to check for the 'state' of the latest commit
-      // We'll filter out excluded checks from the overall state calculation too
+    } else if (data.checks === CHECK_TYPES.REQUIRED) {
+      // Process required checks only
+      commitStatus = processRequiredChecks(result, checksToExclude)
     } else {
-      // Log all available checks for debugging
-      const allChecks =
-        result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-          .contexts.nodes
-      logAllChecks(allChecks)
-
-      // Filter out excluded checks
-      const filteredChecks = filterExcludedChecks(allChecks, checksToExclude)
-
-      core.info(
-        `Evaluating ${filteredChecks.length} total checks (after exclusions)`
-      )
-
-      // If all other checks are successful, return SUCCESS, otherwise use the overall state
-      if (filteredChecks.length === 0) {
-        core.info(
-          '💡 no other CI checks found after filtering out excluded checks'
-        )
-        commitStatus = null
-      } else {
-        // Log the status of each check and check for failures
-        const hasFailingCheck = logCheckResults(filteredChecks, 'all')
-
-        // Determine overall status
-        const allSuccessful = areAllChecksSuccessful(filteredChecks)
-        commitStatus = allSuccessful
-          ? 'SUCCESS'
-          : result.repository.pullRequest.commits.nodes[0].commit
-              .statusCheckRollup.state
-
-        // Log overall status summary
-        const overallState =
-          result.repository.pullRequest.commits.nodes[0].commit
-            .statusCheckRollup.state
-        logOverallStatus(hasFailingCheck, 'all', overallState)
-      }
+      // Process all checks
+      commitStatus = processAllChecks(result, checksToExclude)
     }
   } catch (e) {
     core.info(
@@ -33866,6 +33946,7 @@ async function status_status(octokit, context, prNumber, data) {
 ;// CONCATENATED MODULE: ./src/functions/outputs.js
 
 
+
 // Helper function for setting GitHub Actions outputs
 // :param status: The object containing the relevant status information
 // :param data: The object containing the relevant data information
@@ -33878,7 +33959,7 @@ function outputs(status, data) {
   core.setOutput('commit_status', status.commit_status || null)
 
   // set the approved output depending on the review decision
-  if (status.review_decision === 'APPROVED') {
+  if (status.review_decision === REVIEW_DECISION.APPROVED) {
     core.setOutput('approved', 'true')
   } else if (status.review_decision === null) {
     core.info(
@@ -33895,51 +33976,93 @@ function outputs(status, data) {
     core.setOutput('evaluation', null)
   }
 
-  // iterate over all the evaluations and check them
-  var pass = true
-  data.evaluations.forEach(evaluation => {
-    if (evaluation === 'approved') {
+  /**
+   * Parse and validate min_approvals evaluation criteria
+   * @param {string} evaluation - The evaluation string (e.g., "min_approvals=2")
+   * @returns {number} The minimum number of approvals required
+   * @throws {Error} If the parsing fails or number is invalid
+   */
+  function parseMinApprovals(evaluation) {
+    const parts = evaluation.split('=')
+    if (parts.length !== 2) {
+      throw new Error(`Invalid min_approvals format: ${evaluation}`)
+    }
+
+    const minApprovals = parseInt(parts[1], 10)
+    if (isNaN(minApprovals) || minApprovals < 0) {
+      throw new Error(`Invalid min_approvals value: ${parts[1]}`)
+    }
+
+    return minApprovals
+  }
+
+  /**
+   * Evaluate a single evaluation criteria
+   * @param {string} evaluation - The evaluation criteria to check
+   * @param {Object} status - The status object containing PR information
+   * @returns {boolean} True if the evaluation passes, false otherwise
+   */
+  function evaluateCriteria(evaluation, status) {
+    if (evaluation === EVALUATION_CRITERIA.APPROVED) {
       if (
-        status.review_decision !== 'APPROVED' &&
+        status.review_decision !== REVIEW_DECISION.APPROVED &&
         status.review_decision !== null
       ) {
         core.warning(`evaluation '${evaluation}' failed - PR is not approved`)
-        pass = false
+        return false
       }
-    } else if (evaluation === 'mergeable') {
+    } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
       if (status.merge_state_status !== 'CLEAN') {
         core.warning(
           `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
         )
-        pass = false
+        return false
       }
-    } else if (evaluation === 'ci_passing') {
-      if (status.commit_status !== 'SUCCESS' && status.commit_status !== null) {
+    } else if (evaluation === EVALUATION_CRITERIA.CI_PASSING) {
+      if (
+        status.commit_status !== PR_STATUS.SUCCESS &&
+        status.commit_status !== null
+      ) {
         core.warning(
           `evaluation '${evaluation}' failed - commit status is not successful`
         )
-        pass = false
+        return false
       }
-    } else if (evaluation.includes('min_approvals')) {
-      // extract the number of approvals from the evaluation string
-      // e.g. "min_approvals=1" will extract 1
-      const minApprovals = parseInt(evaluation.split('=')[1])
-      if (status.total_approvals < minApprovals) {
-        // if the total approvals are less than the minimum required approvals, fail the evaluation
-        core.warning(
-          `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
-        )
-        pass = false
+    } else if (evaluation.includes(EVALUATION_CRITERIA.MIN_APPROVALS)) {
+      try {
+        const minApprovals = parseMinApprovals(evaluation)
+        if (status.total_approvals < minApprovals) {
+          core.warning(
+            `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
+          )
+          return false
+        }
+      } catch (error) {
+        core.warning(`evaluation '${evaluation}' failed - ${error.message}`)
+        return false
       }
     } else {
       core.warning(
         `evaluation '${evaluation}' failed - unknown evaluation criteria`
       )
+      return false
+    }
+
+    return true
+  }
+
+  // iterate over all the evaluations and check them
+  let pass = true
+  data.evaluations.forEach(evaluation => {
+    if (!evaluateCriteria(evaluation, status)) {
       pass = false
     }
   })
 
-  core.setOutput('evaluation', pass ? 'PASS' : 'FAIL')
+  core.setOutput(
+    'evaluation',
+    pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
+  )
   core.debug(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass
@@ -33949,10 +34072,18 @@ function outputs(status, data) {
 
 
 // Helper function to convert a String to an Array specifically in Actions
-// :param string: A comma seperated string to convert to an array
+// :param string: A comma separated string to convert to an array
 // :return Array: The function returns an Array - can be empty
 function stringToArray(string) {
   try {
+    // Input validation - handle null, undefined, or non-string inputs
+    if (string === null || string === undefined || typeof string !== 'string') {
+      core.debug(
+        'in stringToArray(), invalid input was found so an empty Array was returned'
+      )
+      return []
+    }
+
     // If the String is empty, return an empty Array
     if (string.trim() === '') {
       core.debug(
@@ -33963,7 +34094,7 @@ function stringToArray(string) {
 
     // Split up the String on commas, trim each element, and return the Array
     const stringArray = string.split(',').map(target => target.trim())
-    var results = []
+    const results = []
 
     // filter out empty items
     for (const item of stringArray) {
@@ -34076,6 +34207,33 @@ async function label(
 
 
 
+/**
+ * Determine labels to add and remove based on evaluation result
+ * @param {boolean} pass - Whether the evaluation passed
+ * @param {Array} passLabels - Labels to add when passing
+ * @param {Array} failLabels - Labels to add when failing
+ * @param {Array} passLabelsCleanup - Labels to remove when passing
+ * @returns {Object} Object with labelsToAdd and labelsToRemove arrays
+ */
+function determineLabelActions(
+  pass,
+  passLabels,
+  failLabels,
+  passLabelsCleanup
+) {
+  if (pass) {
+    return {
+      labelsToAdd: passLabels,
+      labelsToRemove: failLabels.concat(passLabelsCleanup)
+    }
+  } else {
+    return {
+      labelsToAdd: failLabels,
+      labelsToRemove: passLabels
+    }
+  }
+}
+
 async function run() {
   try {
     core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
@@ -34138,22 +34296,20 @@ async function run() {
     const pass = outputs(statusResult, data)
     core.debug(`pass: ${pass}`)
 
-    // conditionally set the labels to add or remove
-    if (pass === true) {
-      // in this case, the labels to add are just the passing labels
-      let labelsToAdd = passLabels
-      // the labels to remove are the failing labels and the cleanup labels
-      let labelsToRemove = failLabels.concat(passLabelsCleanup)
+    // determine labels to add and remove based on evaluation result
+    const {labelsToAdd, labelsToRemove} = determineLabelActions(
+      pass,
+      passLabels,
+      failLabels,
+      passLabelsCleanup
+    )
 
-      core.debug(`labelsToAdd: ${labelsToAdd}`)
-      core.debug(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
-      core.debug(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
-      core.debug(`labelsToRemove: ${labelsToRemove}`)
+    core.debug(`labelsToAdd: ${labelsToAdd}`)
+    core.debug(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
+    core.debug(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
+    core.debug(`labelsToRemove: ${labelsToRemove}`)
 
-      await label(prNumber, github.context, octokit, labelsToAdd, labelsToRemove)
-    } else {
-      await label(prNumber, github.context, octokit, failLabels, passLabels)
-    }
+    await label(prNumber, github.context, octokit, labelsToAdd, labelsToRemove)
 
     return 'success'
   } catch (error) {

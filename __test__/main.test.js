@@ -105,4 +105,22 @@ describe('main', () => {
 
     expect(outputs.outputs).toHaveBeenCalled()
   })
+
+  test('should handle label actions when evaluation fails', async () => {
+    jest.spyOn(outputs, 'outputs').mockImplementation(() => {
+      return false
+    })
+
+    const result = await run()
+    expect(result).toBe('success')
+
+    // Verify that label function was called with fail labels and pass labels for removal
+    expect(label.label).toHaveBeenCalledWith(
+      '123',
+      expect.anything(),
+      expect.anything(),
+      ['needs-review'], // fail labels to add
+      ['ready-for-deployment'] // pass labels to remove
+    )
+  })
 })
