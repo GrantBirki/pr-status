@@ -6,34 +6,44 @@ import {
   PR_STATUS
 } from './constants'
 
-// Helper function for setting GitHub Actions outputs
-// :param status: The object containing the relevant status information
-// :param data: The object containing the relevant data information
-// :return: nothing
+/**
+ * Set GitHub Actions outputs and evaluate criteria
+ * @param {Object} status - The object containing the relevant status information
+ * @param {Object} data - The object containing the relevant data information
+ * @returns {boolean} Whether all evaluation criteria pass
+ */
 export function outputs(status, data) {
-  // set the outputs
+  core.debug('📊 Setting GitHub Actions outputs...')
+
+  // Set the outputs
   core.setOutput('review_decision', status.review_decision || null)
   core.setOutput('total_approvals', status.total_approvals || 0)
   core.setOutput('merge_state_status', status.merge_state_status || null)
   core.setOutput('commit_status', status.commit_status || null)
 
-  // set the approved output depending on the review decision
+  // Set the approved output depending on the review decision
   if (status.review_decision === REVIEW_DECISION.APPROVED) {
     core.setOutput('approved', 'true')
   } else if (status.review_decision === null) {
     core.info(
-      'PR has no approval requirements so it is technically considered approved'
+      '💡 PR has no approval requirements so it is technically considered approved'
     )
     core.setOutput('approved', 'true')
   } else {
     core.setOutput('approved', 'false')
   }
 
-  // set the evaluation output depending on the input criteria
-  // if no evaluations were provided, set the output to null
+  // Set the evaluation output depending on the input criteria
   if (data.evaluations.length === 0) {
-    core.setOutput('evaluation', null)
+    core.info('💡 No evaluation criteria provided')
+    core.setOutput('evaluation', EVALUATION_RESULT.PASS)
+    core.info(`📊 Evaluation result: PASS ✅`)
+    return true // Default to pass when no criteria
   }
+
+  core.info(
+    `🔍 Evaluating ${data.evaluations.length} criteria: ${data.evaluations.join(', ')}`
+  )
 
   /**
    * Parse and validate min_approvals evaluation criteria
@@ -67,13 +77,15 @@ export function outputs(status, data) {
         status.review_decision !== REVIEW_DECISION.APPROVED &&
         status.review_decision !== null
       ) {
-        core.warning(`evaluation '${evaluation}' failed - PR is not approved`)
+        core.warning(
+          `⚠️ Evaluation '${evaluation}' failed - PR is not approved`
+        )
         return false
       }
     } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
       if (status.merge_state_status !== 'CLEAN') {
         core.warning(
-          `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
+          `⚠️ Evaluation '${evaluation}' failed - PR is not cleanly mergeable`
         )
         return false
       }
@@ -83,7 +95,7 @@ export function outputs(status, data) {
         status.commit_status !== null
       ) {
         core.warning(
-          `evaluation '${evaluation}' failed - commit status is not successful`
+          `⚠️ Evaluation '${evaluation}' failed - commit status is not successful`
         )
         return false
       }
@@ -92,17 +104,17 @@ export function outputs(status, data) {
         const minApprovals = parseMinApprovals(evaluation)
         if (status.total_approvals < minApprovals) {
           core.warning(
-            `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
+            `⚠️ Evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals`
           )
           return false
         }
       } catch (error) {
-        core.warning(`evaluation '${evaluation}' failed - ${error.message}`)
+        core.warning(`⚠️ Evaluation '${evaluation}' failed - ${error.message}`)
         return false
       }
     } else {
       core.warning(
-        `evaluation '${evaluation}' failed - unknown evaluation criteria`
+        `⚠️ Evaluation '${evaluation}' failed - unknown evaluation criteria`
       )
       return false
     }
@@ -110,7 +122,7 @@ export function outputs(status, data) {
     return true
   }
 
-  // iterate over all the evaluations and check them
+  // Iterate over all the evaluations and check them
   let pass = true
   data.evaluations.forEach(evaluation => {
     if (!evaluateCriteria(evaluation, status)) {
@@ -122,7 +134,7 @@ export function outputs(status, data) {
     'evaluation',
     pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
   )
-  core.info(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
+  core.info(`📊 Evaluation result: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass
 }

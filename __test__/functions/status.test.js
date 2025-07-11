@@ -93,7 +93,7 @@ describe('status function', () => {
     })
 
     expect(core.debug).toHaveBeenCalledWith(
-      expect.stringContaining('statusResult:')
+      expect.stringContaining('Status result:')
     )
   })
 
@@ -383,7 +383,7 @@ describe('status function', () => {
 
     expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining(
-        'no other CI checks found after filtering out excluded checks'
+        'No CI checks found after filtering out excluded checks'
       )
     )
   })
@@ -636,6 +636,234 @@ describe('status function', () => {
     // Should evaluate 2 checks after exclusions (test foo and test bar)
     expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining('Evaluating 2 total checks (after exclusions)')
+    )
+  })
+
+  test('should handle case when no checks are present', async () => {
+    data.excludeChecks = []
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 1
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [] // No checks present
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: null // Should be null when no checks found
+    })
+
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining('No CI checks found on this pull request')
+    )
+  })
+
+  test('should handle case when no required checks remain after filtering', async () => {
+    data.checks = 'required'
+    data.excludeChecks = ['test-check']
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 1
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'test-check' // This will be filtered out
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'SUCCESS' // Should be SUCCESS when no required checks remain
+    })
+
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining('No required checks found after filtering')
+    )
+  })
+
+  test('should handle checks with Unknown name gracefully', async () => {
+    data.excludeChecks = ['unknown-check']
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 1
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS'
+                          // No name or context property - should result in 'Unknown'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'SUCCESS'
+    })
+
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Check with unknown name found, including in evaluation'
+      )
+    )
+  })
+
+  test('should handle when no exclude patterns are provided', async () => {
+    // Test the edge case where excludePatterns is empty/null
+    data.excludeChecks = null
+    data.workflow = null
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 1
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'test-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'SUCCESS'
+    })
+
+    // Should still include the fallback workflow name
+    expect(core.info).toHaveBeenCalledWith(expect.stringContaining('pr-status'))
+  })
+
+  test('should handle GraphQL errors gracefully', async () => {
+    data.excludeChecks = []
+    data.workflow = 'test-workflow'
+
+    const graphqlError = new Error('GraphQL query failed')
+    octokit.graphql = jest.fn().mockRejectedValue(graphqlError)
+
+    await expect(status(octokit, context, prNumber, data)).rejects.toThrow(
+      'GraphQL query failed'
+    )
+
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to fetch PR status')
+    )
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Error details:')
     )
   })
 })

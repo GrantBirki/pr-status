@@ -1,12 +1,14 @@
 import * as core from '@actions/core'
 
-// Helper function to add labels to a pull request
-// :param issueNumber: The issue number to add the labels to
-// :param context: The GitHub Actions event context
-// :param octokit: The octokit client
-// :param labelsToAdd: An array of labels to add to the pull request (Array)
-// :parm labelsToRemove: An array of labels to remove from the pull request (Array)
-// :returns: An object containing the labels added and removed (Object)
+/**
+ * Add and remove labels from a pull request
+ * @param {string} issueNumber - The issue number to add the labels to
+ * @param {Object} context - The GitHub Actions event context
+ * @param {Object} octokit - The octokit client
+ * @param {Array} labelsToAdd - An array of labels to add to the pull request
+ * @param {Array} labelsToRemove - An array of labels to remove from the pull request
+ * @returns {Object} An object containing the labels added and removed
+ */
 export async function label(
   issueNumber,
   context,
@@ -14,63 +16,72 @@ export async function label(
   labelsToAdd,
   labelsToRemove
 ) {
-  // Get the owner, repo, and issue number from the context
   const {owner, repo} = context.repo
-  var addedLabels = [] // an array of labels that were actually added
-  var removedLabels = [] // an array of labels that were actually removed
+  const addedLabels = [] // an array of labels that were actually added
+  const removedLabels = [] // an array of labels that were actually removed
 
-  // exit early if there are no labels to add or remove
+  // Exit early if there are no labels to add or remove
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
-    core.info('🏷️ no labels to add or remove')
+    core.info('🏷️ No labels to add or remove')
     return {
       added: [],
       removed: []
     }
   }
 
-  // first, find and cleanup labelsToRemove if any are provided
+  core.info(`🏷️ Processing labels for PR #${issueNumber}`)
+
+  // First, find and cleanup labelsToRemove if any are provided
   if (labelsToRemove.length > 0) {
-    // Fetch current labels on the issue
-    core.debug('fetching current labels on the issue')
-    const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
-      owner: owner,
-      repo: repo,
-      issue_number: issueNumber
-    })
-    const currentLabels = currentLabelsResult.data.map(label => label.name)
+    core.debug('🔍 Fetching current labels on the issue')
 
-    core.info(`current labels: ${currentLabels}`)
-    core.info(`labels to remove: ${labelsToRemove}`)
+    try {
+      const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
+        owner: owner,
+        repo: repo,
+        issue_number: issueNumber
+      })
+      const currentLabels = currentLabelsResult.data.map(label => label.name)
 
-    // Remove unwanted labels
-    for (const label of labelsToRemove) {
-      if (currentLabels.includes(label)) {
-        await octokit.rest.issues.removeLabel({
-          owner: owner,
-          repo: repo,
-          issue_number: issueNumber,
-          name: label
-        })
-        core.info(`🏷️ label removed: ${label}`)
-        removedLabels.push(label)
-      } else {
-        core.info(`🏷️ label not found: '${label}' so it was not removed`)
+      core.debug(`📋 Current labels: ${currentLabels.join(', ')}`)
+      core.debug(`❌ Labels to remove: ${labelsToRemove.join(', ')}`)
+
+      // Remove unwanted labels
+      for (const label of labelsToRemove) {
+        if (currentLabels.includes(label)) {
+          await octokit.rest.issues.removeLabel({
+            owner: owner,
+            repo: repo,
+            issue_number: issueNumber,
+            name: label
+          })
+          core.info(`🏷️ ❌ Label removed: ${label}`)
+          removedLabels.push(label)
+        } else {
+          core.info(`🏷️ ⚠️ Label not found: '${label}' so it was not removed`)
+        }
       }
+    } catch (error) {
+      core.warning(`⚠️ Failed to process label removal: ${error.message}`)
     }
   }
 
-  // now, add the labels if any are provided
+  // Now, add the labels if any are provided
   if (labelsToAdd.length > 0) {
-    core.debug(`attempting to apply labels: ${labelsToAdd}`)
-    await octokit.rest.issues.addLabels({
-      owner: owner,
-      repo: repo,
-      issue_number: issueNumber,
-      labels: labelsToAdd
-    })
-    core.info(`🏷️ labels added: ${labelsToAdd}`)
+    core.debug(`🔍 Attempting to apply labels: ${labelsToAdd.join(', ')}`)
 
-    addedLabels = labelsToAdd
+    try {
+      await octokit.rest.issues.addLabels({
+        owner: owner,
+        repo: repo,
+        issue_number: issueNumber,
+        labels: labelsToAdd
+      })
+      core.info(`🏷️ ✅ Labels added: ${labelsToAdd.join(', ')}`)
+      addedLabels.push(...labelsToAdd)
+    } catch (error) {
+      core.warning(`⚠️ Failed to add labels: ${error.message}`)
+    }
   }
 
   return {
