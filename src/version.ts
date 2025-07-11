@@ -6,4 +6,4 @@
 // - v1.1.1-rc.1
 // - etc
 
-export const VERSION: string = 'v1.5.0'
+export const VERSION: string = 'v2.0.0'
