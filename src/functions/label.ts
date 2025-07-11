@@ -1,23 +1,26 @@
 import * as core from '@actions/core'
+import { GitHubContext, LabelResult, OctokitClient } from '../types'
 
-// Helper function to add labels to a pull request
-// :param issueNumber: The issue number to add the labels to
-// :param context: The GitHub Actions event context
-// :param octokit: The octokit client
-// :param labelsToAdd: An array of labels to add to the pull request (Array)
-// :parm labelsToRemove: An array of labels to remove from the pull request (Array)
-// :returns: An object containing the labels added and removed (Object)
+/**
+ * Helper function to add labels to a pull request
+ * @param issueNumber - The issue number to add the labels to
+ * @param context - The GitHub Actions event context
+ * @param octokit - The octokit client
+ * @param labelsToAdd - An array of labels to add to the pull request
+ * @param labelsToRemove - An array of labels to remove from the pull request
+ * @returns An object containing the labels added and removed
+ */
 export async function label(
-  issueNumber,
-  context,
-  octokit,
-  labelsToAdd,
-  labelsToRemove
-) {
+  issueNumber: number,
+  context: GitHubContext,
+  octokit: OctokitClient,
+  labelsToAdd: string[],
+  labelsToRemove: string[]
+): Promise<LabelResult> {
   // Get the owner, repo, and issue number from the context
-  const {owner, repo} = context.repo
-  var addedLabels = [] // an array of labels that were actually added
-  var removedLabels = [] // an array of labels that were actually removed
+  const { owner, repo } = context.repo
+  let addedLabels: string[] = [] // an array of labels that were actually added
+  let removedLabels: string[] = [] // an array of labels that were actually removed
 
   // exit early if there are no labels to add or remove
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
@@ -37,7 +40,7 @@ export async function label(
       repo: repo,
       issue_number: issueNumber
     })
-    const currentLabels = currentLabelsResult.data.map(label => label.name)
+    const currentLabels: string[] = currentLabelsResult.data.map(label => label.name)
 
     core.info(`current labels: ${currentLabels}`)
     core.info(`labels to remove: ${labelsToRemove}`)

@@ -1,10 +1,12 @@
-import {label} from '../../src/functions/label'
+import { label } from '../../src/functions/label'
 import * as core from '@actions/core'
+import { GitHubContext, OctokitClient } from '../../src/types'
 
 const issueNumber = 123
 
-var context
-var octokit
+let context: GitHubContext
+let octokit: OctokitClient
+
 beforeEach(() => {
   jest.spyOn(core, 'info').mockImplementation(() => {})
   jest.spyOn(core, 'debug').mockImplementation(() => {})
@@ -17,7 +19,13 @@ beforeEach(() => {
     },
     issue: {
       number: 1
-    }
+    },
+    payload: {
+      pull_request: {
+        number: 1
+      }
+    },
+    workflow: 'test'
   }
 
   octokit = {
@@ -40,7 +48,8 @@ beforeEach(() => {
           ]
         })
       }
-    }
+    },
+    graphql: jest.fn()
   }
 })
 
