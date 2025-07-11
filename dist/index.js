@@ -33618,7 +33618,27 @@ function getCheckName(check) {
  * @returns {string} The check status in uppercase
  */
 function getCheckStatus(check) {
-  return (check.conclusion || check.state || 'UNKNOWN').toUpperCase()
+  // For CheckRun, prioritize conclusion over status, then fallback to state
+  // For StatusContext, use state
+  const status = (
+    check.conclusion ||
+    check.status ||
+    check.state ||
+    'UNKNOWN'
+  ).toUpperCase()
+
+  // Add debug logging to help troubleshoot cases where we get UNKNOWN
+  if (status === 'UNKNOWN') {
+    core.debug(`⚠️ Check status is UNKNOWN for check: ${JSON.stringify(check)}`)
+
+    // Try to provide more context about what fields are available
+    const availableFields = Object.keys(check).filter(
+      key => check[key] !== null && check[key] !== undefined
+    )
+    core.debug(`Available fields: ${availableFields.join(', ')}`)
+  }
+
+  return status
 }
 
 /**
@@ -33649,7 +33669,7 @@ function logAllChecks(checks) {
     const checkName = getCheckName(check)
     const isRequired = check.isRequired ? '(required)' : '(optional)'
     const checkStatus = getCheckStatus(check)
-    core.info(`  - ${checkName} ${isRequired}: ${checkStatus}`)
+    core.info(`  - check: ${checkName} ${isRequired} - state: ${checkStatus}`)
   })
 }
 
@@ -33849,6 +33869,7 @@ const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
                   ... on CheckRun {
                     isRequired(pullRequestNumber:$number)
                     conclusion
+                    status
                     name
                   }
                   ... on StatusContext {

@@ -848,6 +848,174 @@ describe('status function', () => {
     expect(core.info).toHaveBeenCalledWith(expect.stringContaining('pr-status'))
   })
 
+  test('should handle checks with UNKNOWN status and provide debug info', async () => {
+    data.excludeChecks = []
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 1
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: null,
+                          status: null,
+                          state: null,
+                          name: 'unknown-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    const result = await status(octokit, context, prNumber, data)
+
+    expect(result).toStrictEqual({
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      total_approvals: 1,
+      commit_status: 'SUCCESS' // Should use overall state since check is UNKNOWN
+    })
+
+    // Should log debug info about the UNKNOWN check
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Check status is UNKNOWN for check:')
+    )
+    expect(core.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Available fields:')
+    )
+  })
+
+  test('should use new logging format with "check:" prefix and "- state:" suffix', async () => {
+    data.excludeChecks = []
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 2
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: 'SUCCESS',
+                          name: 'required-check'
+                        },
+                        {
+                          isRequired: false,
+                          conclusion: 'PENDING',
+                          name: 'optional-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    await status(octokit, context, prNumber, data)
+
+    // Should use the new logging format
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '  - check: required-check (required) - state: SUCCESS'
+      )
+    )
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '  - check: optional-check (optional) - state: PENDING'
+      )
+    )
+  })
+
+  test('should handle CheckRun status field when conclusion is not available', async () => {
+    data.excludeChecks = []
+    data.workflow = 'test-workflow'
+
+    octokit.graphql = jest.fn().mockReturnValue({
+      repository: {
+        pullRequest: {
+          reviewDecision: 'APPROVED',
+          mergeStateStatus: 'CLEAN',
+          reviews: {
+            totalCount: 1
+          },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  checkSuites: {
+                    totalCount: 1
+                  },
+                  statusCheckRollup: {
+                    state: 'SUCCESS',
+                    contexts: {
+                      nodes: [
+                        {
+                          isRequired: true,
+                          conclusion: null,
+                          status: 'IN_PROGRESS',
+                          name: 'in-progress-check'
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+
+    await status(octokit, context, prNumber, data)
+
+    // Should use the status field when conclusion is not available
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '  - check: in-progress-check (required) - state: IN_PROGRESS'
+      )
+    )
+  })
+
   test('should handle GraphQL errors gracefully', async () => {
     data.excludeChecks = []
     data.workflow = 'test-workflow'
