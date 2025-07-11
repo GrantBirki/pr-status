@@ -210,34 +210,48 @@ async function status(octokit, context, prNumber, data) {
     };
     const excludeChecks = data.excludeChecks || [];
     const currentActionName = data.workflow || 'pr-status';
-    const checksToExclude = [...excludeChecks, currentActionName].filter(Boolean);
+    const checksToExclude = [
+        ...excludeChecks,
+        currentActionName
+    ].filter(Boolean);
     core.info(`Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`);
-    const result = await octokit.graphql(PR_STATUS_QUERY, variables);
+    let result = null;
     let commitStatus = null;
     try {
-        if (result.repository.pullRequest.commits.nodes[0]?.commit.checkSuites
-            .totalCount === 0) {
-            core.info('💡 no CI checks have been defined for this pull request');
-            commitStatus = null;
-        }
-        else if (data.checks === constants_1.CHECK_TYPES.REQUIRED) {
-            commitStatus = processRequiredChecks(result, checksToExclude);
-        }
-        else {
-            commitStatus = processAllChecks(result, checksToExclude);
-        }
+        result = await octokit.graphql(PR_STATUS_QUERY, variables);
     }
     catch (e) {
         core.info(`could not retrieve PR commit status: ${e} - Handled: ${colors_1.COLORS.success}OK`);
         core.info('this repo may not have any CI checks defined');
         core.info('skipping commit status check and proceeding...');
         commitStatus = null;
+    }
+    if (result) {
         try {
-            core.debug('raw graphql result for debugging:');
-            core.debug(JSON.stringify(result));
+            if (result.repository.pullRequest.commits.nodes[0]?.commit.checkSuites
+                .totalCount === 0) {
+                core.info('💡 no CI checks have been defined for this pull request');
+                commitStatus = null;
+            }
+            else if (data.checks === constants_1.CHECK_TYPES.REQUIRED) {
+                commitStatus = processRequiredChecks(result, checksToExclude);
+            }
+            else {
+                commitStatus = processAllChecks(result, checksToExclude);
+            }
         }
-        catch {
-            core.debug('Could not output raw graphql result for debugging - This is bad');
+        catch (e) {
+            core.info(`could not retrieve PR commit status: ${e} - Handled: ${colors_1.COLORS.success}OK`);
+            core.info('this repo may not have any CI checks defined');
+            core.info('skipping commit status check and proceeding...');
+            commitStatus = null;
+            try {
+                core.debug('raw graphql result for debugging:');
+                core.debug(JSON.stringify(result));
+            }
+            catch {
+                core.debug('Could not output raw graphql result for debugging - This is bad');
+            }
         }
     }
     const statusResult = {

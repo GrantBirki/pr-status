@@ -52,10 +52,13 @@ export const CHECK_TYPES = {
 } as const
 
 // Type definitions for constants
-export type PRStatus = typeof PR_STATUS[keyof typeof PR_STATUS]
-export type ReviewDecision = typeof REVIEW_DECISION[keyof typeof REVIEW_DECISION]
-export type MergeState = typeof MERGE_STATE[keyof typeof MERGE_STATE]
-export type EvaluationResult = typeof EVALUATION_RESULT[keyof typeof EVALUATION_RESULT]
-export type CheckStatus = typeof CHECK_STATUS[keyof typeof CHECK_STATUS]
-export type EvaluationCriteria = typeof EVALUATION_CRITERIA[keyof typeof EVALUATION_CRITERIA]
-export type CheckType = typeof CHECK_TYPES[keyof typeof CHECK_TYPES]
+export type PRStatus = (typeof PR_STATUS)[keyof typeof PR_STATUS]
+export type ReviewDecision =
+  (typeof REVIEW_DECISION)[keyof typeof REVIEW_DECISION]
+export type MergeState = (typeof MERGE_STATE)[keyof typeof MERGE_STATE]
+export type EvaluationResult =
+  (typeof EVALUATION_RESULT)[keyof typeof EVALUATION_RESULT]
+export type CheckStatus = (typeof CHECK_STATUS)[keyof typeof CHECK_STATUS]
+export type EvaluationCriteria =
+  (typeof EVALUATION_CRITERIA)[keyof typeof EVALUATION_CRITERIA]
+export type CheckType = (typeof CHECK_TYPES)[keyof typeof CHECK_TYPES]

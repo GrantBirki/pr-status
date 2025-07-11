@@ -1,7 +1,7 @@
 // Import the outputs function and mock @actions/core
-import { outputs } from '../../src/functions/outputs'
+import {outputs} from '../../src/functions/outputs'
 import * as core from '@actions/core'
-import { StatusResult, ActionData } from '../../src/types'
+import {StatusResult, ActionData} from '../../src/types'
 
 // Mock the core module
 jest.mock('@actions/core')
@@ -78,7 +78,9 @@ describe('outputs function', () => {
     const result = outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('ci_passing'))
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('ci_passing')
+    )
     expect(result).toBe(false)
   })
 
@@ -100,7 +102,9 @@ describe('outputs function', () => {
     const result = outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('mergeable'))
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('mergeable')
+    )
     expect(result).toBe(false)
   })
 
@@ -122,7 +126,9 @@ describe('outputs function', () => {
     const result = outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('min_approvals'))
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('min_approvals')
+    )
     expect(result).toBe(false)
   })
 
@@ -165,7 +171,9 @@ describe('outputs function', () => {
     const result = outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('min_approvals'))
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('min_approvals')
+    )
     expect(result).toBe(false)
   })
 
@@ -187,7 +195,9 @@ describe('outputs function', () => {
     const result = outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
-    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('unknown_criteria'))
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('unknown_criteria')
+    )
     expect(result).toBe(false)
   })
 

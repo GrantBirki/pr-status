@@ -1,17 +1,17 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import { VERSION } from './version'
-import { context } from '@actions/github'
-import { retry } from '@octokit/plugin-retry'
-import { COLORS } from './functions/colors'
-import { status } from './functions/status'
-import { outputs } from './functions/outputs'
-import { stringToArray } from './functions/string-to-array'
-import { label } from './functions/label'
-import { 
-  GitHubContext, 
-  ActionData, 
-  StatusResult, 
+import {VERSION} from './version'
+import {context} from '@actions/github'
+import {retry} from '@octokit/plugin-retry'
+import {COLORS} from './functions/colors'
+import {status} from './functions/status'
+import {outputs} from './functions/outputs'
+import {stringToArray} from './functions/string-to-array'
+import {label} from './functions/label'
+import {
+  GitHubContext,
+  ActionData,
+  StatusResult,
   LabelActions,
   OctokitClient
 } from './types'
@@ -51,32 +51,32 @@ export async function run(): Promise<string> {
     core.debug(`context: ${JSON.stringify(context, null, 2)}`)
 
     // get the inputs
-    const token: string = core.getInput('github_token', { required: true })
+    const token: string = core.getInput('github_token', {required: true})
     const workflow: string =
-      core.getInput('workflow', { required: false }) || context.workflow
-    const checks: string = core.getInput('checks', { required: true })
+      core.getInput('workflow', {required: false}) || context.workflow
+    const checks: string = core.getInput('checks', {required: true})
     const evaluations: string[] = stringToArray(
-      core.getInput('evaluations', { required: true })
+      core.getInput('evaluations', {required: true})
     )
     const passLabels: string[] = stringToArray(
-      core.getInput('pass_labels', { required: false })
+      core.getInput('pass_labels', {required: false})
     )
     const passLabelsCleanup: string[] = stringToArray(
-      core.getInput('pass_labels_cleanup', { required: false })
+      core.getInput('pass_labels_cleanup', {required: false})
     )
     const failLabels: string[] = stringToArray(
-      core.getInput('fail_labels', { required: false })
+      core.getInput('fail_labels', {required: false})
     )
     const excludeChecks: string[] = stringToArray(
-      core.getInput('exclude_checks', { required: false })
+      core.getInput('exclude_checks', {required: false})
     )
-    const prNumberInput: string = core.getInput('pr_number', { required: false })
+    const prNumberInput: string = core.getInput('pr_number', {required: false})
     const prNumber: number = parseInt(
       prNumberInput ||
-      String(context.issue.number) ||
-      String(context.payload.pull_request?.number || 0)
+        String(context.issue.number) ||
+        String(context.payload.pull_request?.number || 0)
     )
-    
+
     if (!prNumber || prNumber === 0) {
       /* istanbul ignore next */
       throw new Error(
@@ -114,7 +114,7 @@ export async function run(): Promise<string> {
     core.info(`pass: ${pass}`)
 
     // determine labels to add and remove based on evaluation result
-    const { labelsToAdd, labelsToRemove }: LabelActions = determineLabelActions(
+    const {labelsToAdd, labelsToRemove}: LabelActions = determineLabelActions(
       pass,
       passLabels,
       failLabels,
@@ -126,7 +126,13 @@ export async function run(): Promise<string> {
     core.info(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
     core.info(`labelsToRemove: ${labelsToRemove}`)
 
-    await label(prNumber, context as GitHubContext, octokit, labelsToAdd, labelsToRemove)
+    await label(
+      prNumber,
+      context as GitHubContext,
+      octokit,
+      labelsToAdd,
+      labelsToRemove
+    )
 
     return 'success'
   } catch (error) {

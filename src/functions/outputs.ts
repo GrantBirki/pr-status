@@ -5,7 +5,7 @@ import {
   EVALUATION_CRITERIA,
   PR_STATUS
 } from './constants'
-import { StatusResult, ActionData } from '../types'
+import {StatusResult, ActionData} from '../types'
 
 /**
  * Parse and validate min_approvals evaluation criteria
@@ -69,7 +69,9 @@ function evaluateCriteria(evaluation: string, status: StatusResult): boolean {
         return false
       }
     } catch (error) {
-      core.warning(`evaluation '${evaluation}' failed - ${(error as Error).message}`)
+      core.warning(
+        `evaluation '${evaluation}' failed - ${(error as Error).message}`
+      )
       return false
     }
   } else {

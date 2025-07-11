@@ -1,7 +1,7 @@
-import { run } from '../src/main'
+import {run} from '../src/main'
 import * as github from '@actions/github'
 import * as core from '@actions/core'
-import { COLORS } from '../src/functions/colors'
+import {COLORS} from '../src/functions/colors'
 import * as status from '../src/functions/status'
 import * as label from '../src/functions/label'
 import * as outputs from '../src/functions/outputs'
@@ -11,6 +11,8 @@ jest.mock('@actions/core')
 jest.mock('@actions/github')
 
 const infoMock = jest.spyOn(core, 'info')
+const errorMock = jest.spyOn(core, 'error')
+const setFailedMock = jest.spyOn(core, 'setFailed')
 const prNumber = '123'
 
 describe('main', () => {
@@ -24,7 +26,7 @@ describe('main', () => {
     jest.spyOn(core, 'warning').mockImplementation(() => {})
     jest.spyOn(core, 'error').mockImplementation(() => {})
     jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
-      const inputs: { [key: string]: string } = {
+      const inputs: {[key: string]: string} = {
         github_token: 'faketoken',
         checks: 'all',
         pr_number: prNumber,
@@ -61,7 +63,7 @@ describe('main', () => {
     jest.spyOn(github, 'getOctokit').mockImplementation(() => {
       return {} as any
     })
-    
+
     jest.spyOn(status, 'status').mockImplementation(() => {
       return Promise.resolve({
         review_decision: 'APPROVED',
@@ -112,7 +114,7 @@ describe('main', () => {
 
   test('successfully runs the action with different inputs', async () => {
     jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
-      const inputs: { [key: string]: string } = {
+      const inputs: {[key: string]: string} = {
         github_token: 'faketoken',
         checks: 'required',
         pr_number: prNumber,
@@ -129,6 +131,157 @@ describe('main', () => {
     expect(await run()).toBe('success')
     expect(infoMock).toHaveBeenCalledWith(
       `🏃 running status checks on pull request ${COLORS.highlight}${prNumber}${COLORS.reset}`
+    )
+  })
+
+  test('runs action with pr_number from context when input is empty', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: '', // Empty PR number
+        evaluations: 'approved',
+        pass_labels: '',
+        pass_labels_cleanup: '',
+        fail_labels: '',
+        workflow: 'test-workflow',
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    expect(await run()).toBe('success')
+    expect(infoMock).toHaveBeenCalledWith(
+      `🏃 running status checks on pull request ${COLORS.highlight}123${COLORS.reset}`
+    )
+  })
+
+  test('runs action with pr_number from payload when context issue number is missing', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: '',
+        evaluations: 'approved',
+        pass_labels: '',
+        pass_labels_cleanup: '',
+        fail_labels: '',
+        workflow: 'test-workflow',
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    // Mock github context without issue number but with payload
+    Object.defineProperty(github, 'context', {
+      value: {
+        payload: {
+          pull_request: {
+            number: 456
+          }
+        },
+        repo: {
+          owner: 'test',
+          repo: 'test'
+        },
+        issue: {
+          number: 456 // This should be the same as payload
+        },
+        workflow: 'test-workflow'
+      },
+      writable: true
+    })
+
+    expect(await run()).toBe('success')
+    expect(infoMock).toHaveBeenCalledWith(
+      `🏃 running status checks on pull request ${COLORS.highlight}456${COLORS.reset}`
+    )
+  })
+
+  test('handles error when PR number is not found', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: '',
+        evaluations: 'approved',
+        pass_labels: '',
+        pass_labels_cleanup: '',
+        fail_labels: '',
+        workflow: 'test-workflow',
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    // Mock github context without any PR number
+    Object.defineProperty(github, 'context', {
+      value: {
+        payload: {},
+        repo: {
+          owner: 'test',
+          repo: 'test'
+        },
+        issue: {
+          number: 0
+        },
+        workflow: 'test-workflow'
+      },
+      writable: true
+    })
+
+    expect(await run()).toBe('failure')
+    expect(setFailedMock).toHaveBeenCalledWith(
+      'pull request number not found in context or inputs, exiting'
+    )
+  })
+
+  test('handles errors in the action gracefully', async () => {
+    jest.spyOn(status, 'status').mockImplementation(() => {
+      throw new Error('Test error')
+    })
+
+    expect(await run()).toBe('failure')
+    expect(errorMock).toHaveBeenCalled()
+    expect(setFailedMock).toHaveBeenCalledWith('Test error')
+  })
+
+  test('handles errors without stack trace', async () => {
+    jest.spyOn(status, 'status').mockImplementation(() => {
+      const error = new Error('Test error')
+      error.stack = undefined
+      throw error
+    })
+
+    expect(await run()).toBe('failure')
+    expect(errorMock).toHaveBeenCalledWith('Test error')
+    expect(setFailedMock).toHaveBeenCalledWith('Test error')
+  })
+
+  test('uses default workflow when not provided', async () => {
+    jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+      const inputs: {[key: string]: string} = {
+        github_token: 'faketoken',
+        checks: 'all',
+        pr_number: prNumber,
+        evaluations: 'approved',
+        pass_labels: '',
+        pass_labels_cleanup: '',
+        fail_labels: '',
+        workflow: '', // Empty workflow
+        exclude_checks: ''
+      }
+      return inputs[name] || ''
+    })
+
+    await run()
+    expect(status.status).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        workflow: 'test-workflow' // Should use context workflow
+      })
     )
   })
 })

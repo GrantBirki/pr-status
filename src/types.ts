@@ -135,7 +135,7 @@ export interface OctokitClient {
         owner: string
         repo: string
         issue_number: number
-      }) => Promise<{ data: Array<{ name: string }> }>
+      }) => Promise<{data: Array<{name: string}>}>
       removeLabel: (params: {
         owner: string
         repo: string

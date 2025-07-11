@@ -1,11 +1,11 @@
 import * as core from '@actions/core'
-import { COLORS } from './colors'
-import { CHECK_STATUS, PR_STATUS, CHECK_TYPES } from './constants'
-import { 
-  GitHubContext, 
-  ActionData, 
-  StatusResult, 
-  OctokitClient, 
+import {COLORS} from './colors'
+import {CHECK_STATUS, PR_STATUS, CHECK_TYPES} from './constants'
+import {
+  GitHubContext,
+  ActionData,
+  StatusResult,
+  OctokitClient,
   GraphQLResponse,
   CheckNode
 } from '../types'
@@ -46,12 +46,12 @@ function getCheckStatus(check: CheckNode): string {
  * @returns True if successful
  */
 function isSuccessfulStatus(status: string): boolean {
-  const successfulStatuses = [
+  const successfulStatuses: string[] = [
     CHECK_STATUS.SUCCESS,
     CHECK_STATUS.SKIPPED,
     CHECK_STATUS.NEUTRAL
   ]
-  return successfulStatuses.includes(status as any)
+  return successfulStatuses.includes(status)
 }
 
 /**
@@ -74,7 +74,10 @@ function logAllChecks(checks: CheckNode[]): void {
  * @param excludePatterns - Array of patterns to exclude
  * @returns Filtered array of checks
  */
-function filterExcludedChecks(checks: CheckNode[], excludePatterns: string[]): CheckNode[] {
+function filterExcludedChecks(
+  checks: CheckNode[],
+  excludePatterns: string[]
+): CheckNode[] {
   return checks.filter(check => {
     const checkName: string = getCheckName(check)
     if (checkName === 'Unknown') {
@@ -99,7 +102,10 @@ function filterExcludedChecks(checks: CheckNode[], excludePatterns: string[]): C
  * @param checkType - Type of checks ('required' or 'all')
  * @returns True if any check is failing
  */
-function logCheckResults(checks: CheckNode[], checkType: string = 'check'): boolean {
+function logCheckResults(
+  checks: CheckNode[],
+  checkType: string = 'check'
+): boolean {
   let hasFailingCheck: boolean = false
 
   checks.forEach(check => {
@@ -140,7 +146,11 @@ function areAllChecksSuccessful(checks: CheckNode[]): boolean {
  * @param checkType - Type of checks ('required' or 'all')
  * @param overallState - The overall state from GitHub (for 'all' mode)
  */
-function logOverallStatus(hasFailures: boolean, checkType: string, overallState: string | null = null): void {
+function logOverallStatus(
+  hasFailures: boolean,
+  checkType: string,
+  overallState: string | null = null
+): void {
   if (hasFailures) {
     if (checkType === CHECK_TYPES.REQUIRED) {
       core.info(
@@ -168,7 +178,10 @@ function logOverallStatus(hasFailures: boolean, checkType: string, overallState:
  * @param checksToExclude - Array of check names to exclude
  * @returns The commit status
  */
-function processRequiredChecks(result: GraphQLResponse, checksToExclude: string[]): string {
+function processRequiredChecks(
+  result: GraphQLResponse,
+  checksToExclude: string[]
+): string {
   // Log all available checks for debugging
   const allChecks: CheckNode[] =
     result.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup
@@ -177,14 +190,20 @@ function processRequiredChecks(result: GraphQLResponse, checksToExclude: string[
 
   // Filter to required checks only, then exclude specified checks
   const requiredChecks: CheckNode[] = allChecks.filter(x => x.isRequired)
-  const filteredChecks: CheckNode[] = filterExcludedChecks(requiredChecks, checksToExclude)
+  const filteredChecks: CheckNode[] = filterExcludedChecks(
+    requiredChecks,
+    checksToExclude
+  )
 
   core.info(
     `Evaluating ${filteredChecks.length} required checks (after exclusions)`
   )
 
   // Log the status of each required check and check for failures
-  const hasFailingCheck: boolean = logCheckResults(filteredChecks, CHECK_TYPES.REQUIRED)
+  const hasFailingCheck: boolean = logCheckResults(
+    filteredChecks,
+    CHECK_TYPES.REQUIRED
+  )
 
   // Determine overall status
   const commitStatus: string = areAllChecksSuccessful(filteredChecks)
@@ -203,7 +222,10 @@ function processRequiredChecks(result: GraphQLResponse, checksToExclude: string[
  * @param checksToExclude - Array of check names to exclude
  * @returns The commit status
  */
-function processAllChecks(result: GraphQLResponse, checksToExclude: string[]): string | null {
+function processAllChecks(
+  result: GraphQLResponse,
+  checksToExclude: string[]
+): string | null {
   // Log all available checks for debugging
   const allChecks: CheckNode[] =
     result.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup
@@ -211,7 +233,10 @@ function processAllChecks(result: GraphQLResponse, checksToExclude: string[]): s
   logAllChecks(allChecks)
 
   // Filter out excluded checks
-  const filteredChecks: CheckNode[] = filterExcludedChecks(allChecks, checksToExclude)
+  const filteredChecks: CheckNode[] = filterExcludedChecks(
+    allChecks,
+    checksToExclude
+  )
 
   core.info(
     `Evaluating ${filteredChecks.length} total checks (after exclusions)`
@@ -224,7 +249,10 @@ function processAllChecks(result: GraphQLResponse, checksToExclude: string[]): s
   }
 
   // Log the status of each check and check for failures
-  const hasFailingCheck: boolean = logCheckResults(filteredChecks, CHECK_TYPES.ALL)
+  const hasFailingCheck: boolean = logCheckResults(
+    filteredChecks,
+    CHECK_TYPES.ALL
+  )
 
   // Determine overall status
   const allSuccessful: boolean = areAllChecksSuccessful(filteredChecks)
@@ -311,7 +339,10 @@ export async function status(
   const currentActionName: string = data.workflow || 'pr-status'
 
   // Combine default exclusions with user-provided exclusions
-  const checksToExclude: string[] = [...excludeChecks, currentActionName].filter(Boolean)
+  const checksToExclude: string[] = [
+    ...excludeChecks,
+    currentActionName
+  ].filter(Boolean)
   core.info(
     `Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
   )
@@ -369,8 +400,7 @@ export async function status(
 
   const statusResult: StatusResult = {
     review_decision: result?.repository?.pullRequest?.reviewDecision || null,
-    total_approvals:
-      result?.repository?.pullRequest?.reviews?.totalCount || 0,
+    total_approvals: result?.repository?.pullRequest?.reviews?.totalCount || 0,
     merge_state_status:
       result?.repository?.pullRequest?.mergeStateStatus || null,
     commit_status: commitStatus || null

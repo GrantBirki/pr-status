@@ -31567,565 +31567,466 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
-/***/ 1139:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+/***/ 9021:
+/***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
-__nccwpck_require__.r(__webpack_exports__);
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   COLORS: () => (/* binding */ COLORS)
-/* harmony export */ });
-const COLORS = {
-  highlight: '\u001b[35m', // magenta
-  info: '\u001b[34m', // blue
-  success: '\u001b[32m', // green
-  warning: '\u001b[33m', // yellow
-  error: '\u001b[31m', // red
-  reset: '\u001b[0m' // reset
-}
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.COLORS = void 0;
+exports.COLORS = {
+    highlight: '\u001b[35m',
+    info: '\u001b[34m',
+    success: '\u001b[32m',
+    warning: '\u001b[33m',
+    error: '\u001b[31m',
+    reset: '\u001b[0m'
+};
 
 
 /***/ }),
 
-/***/ 6686:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+/***/ 5100:
+/***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   F8: () => (/* binding */ EVALUATION_CRITERIA),
-/* harmony export */   If: () => (/* binding */ REVIEW_DECISION),
-/* harmony export */   Q2: () => (/* binding */ PR_STATUS),
-/* harmony export */   Tv: () => (/* binding */ CHECK_TYPES),
-/* harmony export */   oG: () => (/* binding */ CHECK_STATUS),
-/* harmony export */   tu: () => (/* binding */ EVALUATION_RESULT)
-/* harmony export */ });
-/* unused harmony export MERGE_STATE */
-// Constants for pull request status values
-const PR_STATUS = {
-  SUCCESS: 'SUCCESS',
-  FAILURE: 'FAILURE',
-  PENDING: 'PENDING',
-  UNKNOWN: 'UNKNOWN'
-}
 
-// Constants for review decision values
-const REVIEW_DECISION = {
-  APPROVED: 'APPROVED',
-  CHANGES_REQUESTED: 'CHANGES_REQUESTED',
-  REVIEW_REQUIRED: 'REVIEW_REQUIRED'
-}
-
-// Constants for merge state status values
-const MERGE_STATE = {
-  CLEAN: 'CLEAN',
-  DIRTY: 'DIRTY',
-  UNKNOWN: 'UNKNOWN',
-  DRAFT: 'DRAFT',
-  BLOCKED: 'BLOCKED'
-}
-
-// Constants for evaluation results
-const EVALUATION_RESULT = {
-  PASS: 'PASS',
-  FAIL: 'FAIL'
-}
-
-// Constants for check status values
-const CHECK_STATUS = {
-  SUCCESS: 'SUCCESS',
-  FAILURE: 'FAILURE',
-  PENDING: 'PENDING',
-  SKIPPED: 'SKIPPED',
-  NEUTRAL: 'NEUTRAL'
-}
-
-// Constants for evaluation criteria
-const EVALUATION_CRITERIA = {
-  APPROVED: 'approved',
-  MERGEABLE: 'mergeable',
-  CI_PASSING: 'ci_passing',
-  MIN_APPROVALS: 'min_approvals'
-}
-
-// Constants for check types
-const CHECK_TYPES = {
-  REQUIRED: 'required',
-  ALL: 'all'
-}
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CHECK_TYPES = exports.EVALUATION_CRITERIA = exports.CHECK_STATUS = exports.EVALUATION_RESULT = exports.MERGE_STATE = exports.REVIEW_DECISION = exports.PR_STATUS = void 0;
+exports.PR_STATUS = {
+    SUCCESS: 'SUCCESS',
+    FAILURE: 'FAILURE',
+    PENDING: 'PENDING',
+    UNKNOWN: 'UNKNOWN'
+};
+exports.REVIEW_DECISION = {
+    APPROVED: 'APPROVED',
+    CHANGES_REQUESTED: 'CHANGES_REQUESTED',
+    REVIEW_REQUIRED: 'REVIEW_REQUIRED'
+};
+exports.MERGE_STATE = {
+    CLEAN: 'CLEAN',
+    DIRTY: 'DIRTY',
+    UNKNOWN: 'UNKNOWN',
+    DRAFT: 'DRAFT',
+    BLOCKED: 'BLOCKED'
+};
+exports.EVALUATION_RESULT = {
+    PASS: 'PASS',
+    FAIL: 'FAIL'
+};
+exports.CHECK_STATUS = {
+    SUCCESS: 'SUCCESS',
+    FAILURE: 'FAILURE',
+    PENDING: 'PENDING',
+    SKIPPED: 'SKIPPED',
+    NEUTRAL: 'NEUTRAL'
+};
+exports.EVALUATION_CRITERIA = {
+    APPROVED: 'approved',
+    MERGEABLE: 'mergeable',
+    CI_PASSING: 'ci_passing',
+    MIN_APPROVALS: 'min_approvals'
+};
+exports.CHECK_TYPES = {
+    REQUIRED: 'required',
+    ALL: 'all'
+};
 
 
 /***/ }),
 
-/***/ 7521:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+/***/ 8519:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
-__nccwpck_require__.r(__webpack_exports__);
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   label: () => (/* binding */ label)
-/* harmony export */ });
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
 
-
-// Helper function to add labels to a pull request
-// :param issueNumber: The issue number to add the labels to
-// :param context: The GitHub Actions event context
-// :param octokit: The octokit client
-// :param labelsToAdd: An array of labels to add to the pull request (Array)
-// :parm labelsToRemove: An array of labels to remove from the pull request (Array)
-// :returns: An object containing the labels added and removed (Object)
-async function label(
-  issueNumber,
-  context,
-  octokit,
-  labelsToAdd,
-  labelsToRemove
-) {
-  // Get the owner, repo, and issue number from the context
-  const {owner, repo} = context.repo
-  var addedLabels = [] // an array of labels that were actually added
-  var removedLabels = [] // an array of labels that were actually removed
-
-  // exit early if there are no labels to add or remove
-  if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('🏷️ no labels to add or remove')
-    return {
-      added: [],
-      removed: []
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
     }
-  }
-
-  // first, find and cleanup labelsToRemove if any are provided
-  if (labelsToRemove.length > 0) {
-    // Fetch current labels on the issue
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug('fetching current labels on the issue')
-    const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
-      owner: owner,
-      repo: repo,
-      issue_number: issueNumber
-    })
-    const currentLabels = currentLabelsResult.data.map(label => label.name)
-
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`current labels: ${currentLabels}`)
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`labels to remove: ${labelsToRemove}`)
-
-    // Remove unwanted labels
-    for (const label of labelsToRemove) {
-      if (currentLabels.includes(label)) {
-        await octokit.rest.issues.removeLabel({
-          owner: owner,
-          repo: repo,
-          issue_number: issueNumber,
-          name: label
-        })
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`🏷️ label removed: ${label}`)
-        removedLabels.push(label)
-      } else {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`🏷️ label not found: '${label}' so it was not removed`)
-      }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.label = label;
+const core = __importStar(__nccwpck_require__(7484));
+async function label(issueNumber, context, octokit, labelsToAdd, labelsToRemove) {
+    const { owner, repo } = context.repo;
+    let addedLabels = [];
+    const removedLabels = [];
+    if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
+        core.info('🏷️ no labels to add or remove');
+        return {
+            added: [],
+            removed: []
+        };
     }
-  }
-
-  // now, add the labels if any are provided
-  if (labelsToAdd.length > 0) {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(`attempting to apply labels: ${labelsToAdd}`)
-    await octokit.rest.issues.addLabels({
-      owner: owner,
-      repo: repo,
-      issue_number: issueNumber,
-      labels: labelsToAdd
-    })
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`🏷️ labels added: ${labelsToAdd}`)
-
-    addedLabels = labelsToAdd
-  }
-
-  return {
-    added: addedLabels,
-    removed: removedLabels
-  }
-}
-
-
-/***/ }),
-
-/***/ 2517:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
-
-"use strict";
-__nccwpck_require__.r(__webpack_exports__);
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   outputs: () => (/* binding */ outputs)
-/* harmony export */ });
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
-/* harmony import */ var _constants__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(6686);
-
-
-
-// Helper function for setting GitHub Actions outputs
-// :param status: The object containing the relevant status information
-// :param data: The object containing the relevant data information
-// :return: nothing
-function outputs(status, data) {
-  // set the outputs
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('review_decision', status.review_decision || null)
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('total_approvals', status.total_approvals || 0)
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('merge_state_status', status.merge_state_status || null)
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('commit_status', status.commit_status || null)
-
-  // set the approved output depending on the review decision
-  if (status.review_decision === _constants__WEBPACK_IMPORTED_MODULE_1__/* .REVIEW_DECISION */ .If.APPROVED) {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('approved', 'true')
-  } else if (status.review_decision === null) {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-      'PR has no approval requirements so it is technically considered approved'
-    )
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('approved', 'true')
-  } else {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('approved', 'false')
-  }
-
-  // set the evaluation output depending on the input criteria
-  // if no evaluations were provided, set the output to null
-  if (data.evaluations.length === 0) {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('evaluation', null)
-  }
-
-  /**
-   * Parse and validate min_approvals evaluation criteria
-   * @param {string} evaluation - The evaluation string (e.g., "min_approvals=2")
-   * @returns {number} The minimum number of approvals required
-   * @throws {Error} If the parsing fails or number is invalid
-   */
-  function parseMinApprovals(evaluation) {
-    const parts = evaluation.split('=')
-    if (parts.length !== 2) {
-      throw new Error(`Invalid min_approvals format: ${evaluation}`)
-    }
-
-    const minApprovals = parseInt(parts[1], 10)
-    if (isNaN(minApprovals) || minApprovals < 0) {
-      throw new Error(`Invalid min_approvals value: ${parts[1]}`)
-    }
-
-    return minApprovals
-  }
-
-  /**
-   * Evaluate a single evaluation criteria
-   * @param {string} evaluation - The evaluation criteria to check
-   * @param {Object} status - The status object containing PR information
-   * @returns {boolean} True if the evaluation passes, false otherwise
-   */
-  function evaluateCriteria(evaluation, status) {
-    if (evaluation === _constants__WEBPACK_IMPORTED_MODULE_1__/* .EVALUATION_CRITERIA */ .F8.APPROVED) {
-      if (
-        status.review_decision !== _constants__WEBPACK_IMPORTED_MODULE_1__/* .REVIEW_DECISION */ .If.APPROVED &&
-        status.review_decision !== null
-      ) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`evaluation '${evaluation}' failed - PR is not approved`)
-        return false
-      }
-    } else if (evaluation === _constants__WEBPACK_IMPORTED_MODULE_1__/* .EVALUATION_CRITERIA */ .F8.MERGEABLE) {
-      if (status.merge_state_status !== 'CLEAN') {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(
-          `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
-        )
-        return false
-      }
-    } else if (evaluation === _constants__WEBPACK_IMPORTED_MODULE_1__/* .EVALUATION_CRITERIA */ .F8.CI_PASSING) {
-      if (
-        status.commit_status !== _constants__WEBPACK_IMPORTED_MODULE_1__/* .PR_STATUS */ .Q2.SUCCESS &&
-        status.commit_status !== null
-      ) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(
-          `evaluation '${evaluation}' failed - commit status is not successful`
-        )
-        return false
-      }
-    } else if (evaluation.includes(_constants__WEBPACK_IMPORTED_MODULE_1__/* .EVALUATION_CRITERIA */ .F8.MIN_APPROVALS)) {
-      try {
-        const minApprovals = parseMinApprovals(evaluation)
-        if (status.total_approvals < minApprovals) {
-          _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(
-            `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
-          )
-          return false
+    if (labelsToRemove.length > 0) {
+        core.debug('fetching current labels on the issue');
+        const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
+            owner: owner,
+            repo: repo,
+            issue_number: issueNumber
+        });
+        const currentLabels = currentLabelsResult.data.map(label => label.name);
+        core.info(`current labels: ${currentLabels}`);
+        core.info(`labels to remove: ${labelsToRemove}`);
+        for (const label of labelsToRemove) {
+            if (currentLabels.includes(label)) {
+                await octokit.rest.issues.removeLabel({
+                    owner: owner,
+                    repo: repo,
+                    issue_number: issueNumber,
+                    name: label
+                });
+                core.info(`🏷️ label removed: ${label}`);
+                removedLabels.push(label);
+            }
+            else {
+                core.info(`🏷️ label not found: '${label}' so it was not removed`);
+            }
         }
-      } catch (error) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`evaluation '${evaluation}' failed - ${error.message}`)
-        return false
-      }
-    } else {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(
-        `evaluation '${evaluation}' failed - unknown evaluation criteria`
-      )
-      return false
     }
-
-    return true
-  }
-
-  // iterate over all the evaluations and check them
-  let pass = true
-  data.evaluations.forEach(evaluation => {
-    if (!evaluateCriteria(evaluation, status)) {
-      pass = false
+    if (labelsToAdd.length > 0) {
+        core.debug(`attempting to apply labels: ${labelsToAdd}`);
+        await octokit.rest.issues.addLabels({
+            owner: owner,
+            repo: repo,
+            issue_number: issueNumber,
+            labels: labelsToAdd
+        });
+        core.info(`🏷️ labels added: ${labelsToAdd}`);
+        addedLabels = labelsToAdd;
     }
-  })
-
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput(
-    'evaluation',
-    pass ? _constants__WEBPACK_IMPORTED_MODULE_1__/* .EVALUATION_RESULT */ .tu.PASS : _constants__WEBPACK_IMPORTED_MODULE_1__/* .EVALUATION_RESULT */ .tu.FAIL
-  )
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
-
-  return pass
+    return {
+        added: addedLabels,
+        removed: removedLabels
+    };
 }
 
 
 /***/ }),
 
-/***/ 4757:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+/***/ 1299:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
-__nccwpck_require__.r(__webpack_exports__);
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   status: () => (/* binding */ status)
-/* harmony export */ });
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
-/* harmony import */ var _colors__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(1139);
-/* harmony import */ var _constants__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(6686);
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.outputs = outputs;
+const core = __importStar(__nccwpck_require__(7484));
+const constants_1 = __nccwpck_require__(5100);
+function parseMinApprovals(evaluation) {
+    const parts = evaluation.split('=');
+    if (parts.length !== 2) {
+        throw new Error(`Invalid min_approvals format: ${evaluation}`);
+    }
+    const minApprovals = parseInt(parts[1], 10);
+    if (isNaN(minApprovals) || minApprovals < 0) {
+        throw new Error(`Invalid min_approvals value: ${parts[1]}`);
+    }
+    return minApprovals;
+}
+function evaluateCriteria(evaluation, status) {
+    if (evaluation === constants_1.EVALUATION_CRITERIA.APPROVED) {
+        if (status.review_decision !== constants_1.REVIEW_DECISION.APPROVED &&
+            status.review_decision !== null) {
+            core.warning(`evaluation '${evaluation}' failed - PR is not approved`);
+            return false;
+        }
+    }
+    else if (evaluation === constants_1.EVALUATION_CRITERIA.MERGEABLE) {
+        if (status.merge_state_status !== 'CLEAN') {
+            core.warning(`evaluation '${evaluation}' failed - PR is not cleanly mergeable`);
+            return false;
+        }
+    }
+    else if (evaluation === constants_1.EVALUATION_CRITERIA.CI_PASSING) {
+        if (status.commit_status !== constants_1.PR_STATUS.SUCCESS &&
+            status.commit_status !== null) {
+            core.warning(`evaluation '${evaluation}' failed - commit status is not successful`);
+            return false;
+        }
+    }
+    else if (evaluation.includes(constants_1.EVALUATION_CRITERIA.MIN_APPROVALS)) {
+        try {
+            const minApprovals = parseMinApprovals(evaluation);
+            if (status.total_approvals < minApprovals) {
+                core.warning(`evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`);
+                return false;
+            }
+        }
+        catch (error) {
+            core.warning(`evaluation '${evaluation}' failed - ${error.message}`);
+            return false;
+        }
+    }
+    else {
+        core.warning(`evaluation '${evaluation}' failed - unknown evaluation criteria`);
+        return false;
+    }
+    return true;
+}
+function outputs(status, data) {
+    core.setOutput('review_decision', status.review_decision || null);
+    core.setOutput('total_approvals', status.total_approvals || 0);
+    core.setOutput('merge_state_status', status.merge_state_status || null);
+    core.setOutput('commit_status', status.commit_status || null);
+    if (status.review_decision === constants_1.REVIEW_DECISION.APPROVED) {
+        core.setOutput('approved', 'true');
+    }
+    else if (status.review_decision === null) {
+        core.info('PR has no approval requirements so it is technically considered approved');
+        core.setOutput('approved', 'true');
+    }
+    else {
+        core.setOutput('approved', 'false');
+    }
+    if (data.evaluations.length === 0) {
+        core.setOutput('evaluation', null);
+    }
+    let pass = true;
+    data.evaluations.forEach(evaluation => {
+        if (!evaluateCriteria(evaluation, status)) {
+            pass = false;
+        }
+    });
+    core.setOutput('evaluation', pass ? constants_1.EVALUATION_RESULT.PASS : constants_1.EVALUATION_RESULT.FAIL);
+    core.info(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`);
+    return pass;
+}
 
 
+/***/ }),
 
+/***/ 8123:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
-/**
- * Get the name of a check from either CheckRun or StatusContext node
- * @param {Object} check - The check object (CheckRun or StatusContext)
- * @returns {string} The check name
- */
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.status = status;
+const core = __importStar(__nccwpck_require__(7484));
+const colors_1 = __nccwpck_require__(9021);
+const constants_1 = __nccwpck_require__(5100);
 function getCheckName(check) {
-  return check.name || check.context || 'Unknown'
+    if ('name' in check) {
+        return check.name || 'Unknown';
+    }
+    if ('context' in check) {
+        return check.context || 'Unknown';
+    }
+    return 'Unknown';
 }
-
-/**
- * Get the status of a check from either CheckRun or StatusContext node
- * @param {Object} check - The check object (CheckRun or StatusContext)
- * @returns {string} The check status in uppercase
- */
 function getCheckStatus(check) {
-  return (check.conclusion || check.state || 'UNKNOWN').toUpperCase()
+    if ('conclusion' in check) {
+        return (check.conclusion || 'UNKNOWN').toUpperCase();
+    }
+    if ('state' in check) {
+        return (check.state || 'UNKNOWN').toUpperCase();
+    }
+    return 'UNKNOWN';
 }
-
-/**
- * Check if a status is considered successful
- * @param {string} status - The status to check
- * @returns {boolean} True if successful
- */
 function isSuccessfulStatus(status) {
-  return [
-    _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_STATUS */ .oG.SUCCESS,
-    _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_STATUS */ .oG.SKIPPED,
-    _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_STATUS */ .oG.NEUTRAL
-  ].includes(status)
+    const successfulStatuses = [
+        constants_1.CHECK_STATUS.SUCCESS,
+        constants_1.CHECK_STATUS.SKIPPED,
+        constants_1.CHECK_STATUS.NEUTRAL
+    ];
+    return successfulStatuses.includes(status);
 }
-
-/**
- * Log all available checks for debugging purposes
- * @param {Array} checks - Array of check objects
- */
 function logAllChecks(checks) {
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`📋 Found ${checks.length} total CI checks on this pull request`)
-  checks.forEach(check => {
-    const checkName = getCheckName(check)
-    const isRequired = check.isRequired ? '(required)' : '(optional)'
-    const checkStatus = getCheckStatus(check)
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`  - ${checkName} ${isRequired}: ${checkStatus}`)
-  })
+    core.info(`📋 Found ${checks.length} total CI checks on this pull request`);
+    checks.forEach(check => {
+        const checkName = getCheckName(check);
+        const isRequired = check.isRequired ? '(required)' : '(optional)';
+        const checkStatus = getCheckStatus(check);
+        core.info(`  - ${checkName} ${isRequired}: ${checkStatus}`);
+    });
 }
-
-/**
- * Filter checks by excluding specified patterns using exact matching
- * @param {Array} checks - Array of check objects
- * @param {Array} excludePatterns - Array of patterns to exclude
- * @returns {Array} Filtered array of checks
- */
 function filterExcludedChecks(checks, excludePatterns) {
-  return checks.filter(check => {
-    const checkName = getCheckName(check)
-    if (checkName === 'Unknown') {
-      // If no name/context available, don't exclude it
-      /* istanbul ignore next */
-      return true
-    }
-
-    const shouldExclude = excludePatterns.some(
-      excludePattern => checkName === excludePattern
-    )
-    if (shouldExclude) {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Excluding check from status evaluation: ${checkName}`)
-    }
-    return !shouldExclude
-  })
+    return checks.filter(check => {
+        const checkName = getCheckName(check);
+        if (checkName === 'Unknown') {
+            return true;
+        }
+        const shouldExclude = excludePatterns.some(excludePattern => checkName === excludePattern);
+        if (shouldExclude) {
+            core.info(`Excluding check from status evaluation: ${checkName}`);
+        }
+        return !shouldExclude;
+    });
 }
-
-/**
- * Log the status of each check and return overall failure status
- * @param {Array} checks - Array of check objects
- * @param {string} checkType - Type of checks ('required' or 'all')
- * @returns {boolean} True if any check is failing
- */
 function logCheckResults(checks, checkType = 'check') {
-  let hasFailingCheck = false
-
-  checks.forEach(check => {
-    const checkName = getCheckName(check)
-    const checkStatus = getCheckStatus(check)
-    const isSuccessful = isSuccessfulStatus(checkStatus)
-
-    if (isSuccessful) {
-      const prefix =
-        checkType === _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.REQUIRED ? 'Required check' : 'Check'
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`✅ ${prefix} '${checkName}': ${checkStatus}`)
-    } else {
-      const prefix =
-        checkType === _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.REQUIRED ? 'Required check' : 'Check'
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`❌ ${prefix} '${checkName}': ${checkStatus} (FAILING)`)
-      hasFailingCheck = true
-    }
-  })
-
-  return hasFailingCheck
+    let hasFailingCheck = false;
+    checks.forEach(check => {
+        const checkName = getCheckName(check);
+        const checkStatus = getCheckStatus(check);
+        const isSuccessful = isSuccessfulStatus(checkStatus);
+        if (isSuccessful) {
+            const prefix = checkType === constants_1.CHECK_TYPES.REQUIRED ? 'Required check' : 'Check';
+            core.info(`✅ ${prefix} '${checkName}': ${checkStatus}`);
+        }
+        else {
+            const prefix = checkType === constants_1.CHECK_TYPES.REQUIRED ? 'Required check' : 'Check';
+            core.info(`❌ ${prefix} '${checkName}': ${checkStatus} (FAILING)`);
+            hasFailingCheck = true;
+        }
+    });
+    return hasFailingCheck;
 }
-
-/**
- * Evaluate if all checks are successful
- * @param {Array} checks - Array of check objects
- * @returns {boolean} True if all checks are successful
- */
 function areAllChecksSuccessful(checks) {
-  return checks.every(check => {
-    const status = getCheckStatus(check)
-    return isSuccessfulStatus(status)
-  })
+    return checks.every(check => {
+        const status = getCheckStatus(check);
+        return isSuccessfulStatus(status);
+    });
 }
-
-/**
- * Log the overall status summary
- * @param {boolean} hasFailures - Whether there are failing checks
- * @param {string} checkType - Type of checks ('required' or 'all')
- * @param {string} overallState - The overall state from GitHub (for 'all' mode)
- */
 function logOverallStatus(hasFailures, checkType, overallState = null) {
-  if (hasFailures) {
-    if (checkType === _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.REQUIRED) {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-        `🔴 Overall required checks status: FAILURE (one or more required checks failed)`
-      )
-    } else {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-        `🔴 Overall CI status: ${overallState} (one or more checks failed)`
-      )
+    if (hasFailures) {
+        if (checkType === constants_1.CHECK_TYPES.REQUIRED) {
+            core.info(`🔴 Overall required checks status: FAILURE (one or more required checks failed)`);
+        }
+        else {
+            core.info(`🔴 Overall CI status: ${overallState} (one or more checks failed)`);
+        }
     }
-  } else {
-    if (checkType === _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.REQUIRED) {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-        `🟢 Overall required checks status: SUCCESS (all required checks passed)`
-      )
-    } else {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`🟢 Overall CI status: SUCCESS (all checks passed)`)
+    else {
+        if (checkType === constants_1.CHECK_TYPES.REQUIRED) {
+            core.info(`🟢 Overall required checks status: SUCCESS (all required checks passed)`);
+        }
+        else {
+            core.info(`🟢 Overall CI status: SUCCESS (all checks passed)`);
+        }
     }
-  }
 }
-
-/**
- * Process required checks and return commit status
- * @param {Object} result - GraphQL result object
- * @param {Array} checksToExclude - Array of check names to exclude
- * @returns {string} The commit status
- */
 function processRequiredChecks(result, checksToExclude) {
-  // Log all available checks for debugging
-  const allChecks =
-    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-      .contexts.nodes
-  logAllChecks(allChecks)
-
-  // Filter to required checks only, then exclude specified checks
-  const requiredChecks = allChecks.filter(x => x.isRequired)
-  const filteredChecks = filterExcludedChecks(requiredChecks, checksToExclude)
-
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-    `Evaluating ${filteredChecks.length} required checks (after exclusions)`
-  )
-
-  // Log the status of each required check and check for failures
-  const hasFailingCheck = logCheckResults(filteredChecks, _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.REQUIRED)
-
-  // Determine overall status
-  const commitStatus = areAllChecksSuccessful(filteredChecks)
-    ? _constants__WEBPACK_IMPORTED_MODULE_2__/* .PR_STATUS */ .Q2.SUCCESS
-    : _constants__WEBPACK_IMPORTED_MODULE_2__/* .PR_STATUS */ .Q2.FAILURE
-
-  // Log overall status summary
-  logOverallStatus(hasFailingCheck, _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.REQUIRED)
-
-  return commitStatus
+    const allChecks = result.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup
+        .contexts.nodes || [];
+    logAllChecks(allChecks);
+    const requiredChecks = allChecks.filter(x => x.isRequired);
+    const filteredChecks = filterExcludedChecks(requiredChecks, checksToExclude);
+    core.info(`Evaluating ${filteredChecks.length} required checks (after exclusions)`);
+    const hasFailingCheck = logCheckResults(filteredChecks, constants_1.CHECK_TYPES.REQUIRED);
+    const commitStatus = areAllChecksSuccessful(filteredChecks)
+        ? constants_1.PR_STATUS.SUCCESS
+        : constants_1.PR_STATUS.FAILURE;
+    logOverallStatus(hasFailingCheck, constants_1.CHECK_TYPES.REQUIRED);
+    return commitStatus;
 }
-
-/**
- * Process all checks and return commit status
- * @param {Object} result - GraphQL result object
- * @param {Array} checksToExclude - Array of check names to exclude
- * @returns {string} The commit status
- */
 function processAllChecks(result, checksToExclude) {
-  // Log all available checks for debugging
-  const allChecks =
-    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-      .contexts.nodes
-  logAllChecks(allChecks)
-
-  // Filter out excluded checks
-  const filteredChecks = filterExcludedChecks(allChecks, checksToExclude)
-
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-    `Evaluating ${filteredChecks.length} total checks (after exclusions)`
-  )
-
-  // If all other checks are successful, return SUCCESS, otherwise use the overall state
-  if (filteredChecks.length === 0) {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('💡 no other CI checks found after filtering out excluded checks')
-    return null
-  }
-
-  // Log the status of each check and check for failures
-  const hasFailingCheck = logCheckResults(filteredChecks, _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.ALL)
-
-  // Determine overall status
-  const allSuccessful = areAllChecksSuccessful(filteredChecks)
-  const commitStatus = allSuccessful
-    ? _constants__WEBPACK_IMPORTED_MODULE_2__/* .PR_STATUS */ .Q2.SUCCESS
-    : result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-        .state
-
-  // Log overall status summary
-  const overallState =
-    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-      .state
-  logOverallStatus(hasFailingCheck, _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.ALL, overallState)
-
-  return commitStatus
+    const allChecks = result.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup
+        .contexts.nodes || [];
+    logAllChecks(allChecks);
+    const filteredChecks = filterExcludedChecks(allChecks, checksToExclude);
+    core.info(`Evaluating ${filteredChecks.length} total checks (after exclusions)`);
+    if (filteredChecks.length === 0) {
+        core.info('💡 no other CI checks found after filtering out excluded checks');
+        return null;
+    }
+    const hasFailingCheck = logCheckResults(filteredChecks, constants_1.CHECK_TYPES.ALL);
+    const allSuccessful = areAllChecksSuccessful(filteredChecks);
+    const commitStatus = allSuccessful
+        ? constants_1.PR_STATUS.SUCCESS
+        : result.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup
+            .state || null;
+    const overallState = result.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup
+        .state || 'UNKNOWN';
+    logOverallStatus(hasFailingCheck, constants_1.CHECK_TYPES.ALL, overallState);
+    return commitStatus;
 }
-
-/**
- * GraphQL query to get PR status information
- */
 const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
   repository(owner:$owner, name:$name) {
     pullRequest(number:$number) {
@@ -32162,164 +32063,141 @@ const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
       }
     }
   }
-}`
-
-// Helper function to get the status of a pull request from multiple perspectives
-// :param octokit: The octokit client
-// :param context: The GitHub Actions event context
-// :param prNumber: The pull request number
-// :param data: An object containing the checks parameter and other data
-// :return: An object containing the review_decision, merge_state_status, and commit_status
+}`;
 async function status(octokit, context, prNumber, data) {
-  const variables = {
-    owner: context.repo.owner,
-    name: context.repo.repo,
-    number: parseInt(prNumber),
-    headers: {
-      Accept: 'application/vnd.github.merge-info-preview+json'
-    }
-  }
-
-  // Get the checks to exclude from status evaluation
-  const excludeChecks = data.excludeChecks || []
-  const currentActionName = data.workflow || 'pr-status'
-
-  // Combine default exclusions with user-provided exclusions
-  const checksToExclude = [...excludeChecks, currentActionName].filter(Boolean)
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-    `Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
-  )
-
-  // Make the GraphQL query
-  const result = await octokit.graphql(PR_STATUS_QUERY, variables)
-
-  let commitStatus = null
-  try {
-    // If there are no CI checks defined at all, we can set the commitStatus to null
-    if (
-      result.repository.pullRequest.commits.nodes[0].commit.checkSuites
-        .totalCount === 0
-    ) {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('💡 no CI checks have been defined for this pull request')
-      commitStatus = null
-    } else if (data.checks === _constants__WEBPACK_IMPORTED_MODULE_2__/* .CHECK_TYPES */ .Tv.REQUIRED) {
-      // Process required checks only
-      commitStatus = processRequiredChecks(result, checksToExclude)
-    } else {
-      // Process all checks
-      commitStatus = processAllChecks(result, checksToExclude)
-    }
-  } catch (e) {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-      `could not retrieve PR commit status: ${e} - Handled: ${_colors__WEBPACK_IMPORTED_MODULE_1__.COLORS.success}OK`
-    )
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('this repo may not have any CI checks defined')
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('skipping commit status check and proceeding...')
-    commitStatus = null
-
-    // Try to display the raw GraphQL result for debugging purposes
+    const variables = {
+        owner: context.repo.owner,
+        name: context.repo.repo,
+        number: prNumber,
+        headers: {
+            Accept: 'application/vnd.github.merge-info-preview+json'
+        }
+    };
+    const excludeChecks = data.excludeChecks || [];
+    const currentActionName = data.workflow || 'pr-status';
+    const checksToExclude = [
+        ...excludeChecks,
+        currentActionName
+    ].filter(Boolean);
+    core.info(`Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`);
+    let result = null;
+    let commitStatus = null;
     try {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug('raw graphql result for debugging:')
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(result)
-    } catch {
-      // istanbul ignore next
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(
-        'Could not output raw graphql result for debugging - This is bad'
-      )
+        result = await octokit.graphql(PR_STATUS_QUERY, variables);
     }
-  }
-
-  const statusResult = {
-    review_decision: result?.repository?.pullRequest?.reviewDecision || null,
-    total_approvals:
-      result?.repository?.pullRequest?.reviews?.totalCount || null,
-    merge_state_status:
-      result?.repository?.pullRequest?.mergeStateStatus || null,
-    commit_status: commitStatus || null
-  }
-
-  _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`)
-
-  return statusResult
+    catch (e) {
+        core.info(`could not retrieve PR commit status: ${e} - Handled: ${colors_1.COLORS.success}OK`);
+        core.info('this repo may not have any CI checks defined');
+        core.info('skipping commit status check and proceeding...');
+        commitStatus = null;
+    }
+    if (result) {
+        try {
+            if (result.repository.pullRequest.commits.nodes[0]?.commit.checkSuites
+                .totalCount === 0) {
+                core.info('💡 no CI checks have been defined for this pull request');
+                commitStatus = null;
+            }
+            else if (data.checks === constants_1.CHECK_TYPES.REQUIRED) {
+                commitStatus = processRequiredChecks(result, checksToExclude);
+            }
+            else {
+                commitStatus = processAllChecks(result, checksToExclude);
+            }
+        }
+        catch (e) {
+            core.info(`could not retrieve PR commit status: ${e} - Handled: ${colors_1.COLORS.success}OK`);
+            core.info('this repo may not have any CI checks defined');
+            core.info('skipping commit status check and proceeding...');
+            commitStatus = null;
+            try {
+                core.debug('raw graphql result for debugging:');
+                core.debug(JSON.stringify(result));
+            }
+            catch {
+                core.debug('Could not output raw graphql result for debugging - This is bad');
+            }
+        }
+    }
+    const statusResult = {
+        review_decision: result?.repository?.pullRequest?.reviewDecision || null,
+        total_approvals: result?.repository?.pullRequest?.reviews?.totalCount || 0,
+        merge_state_status: result?.repository?.pullRequest?.mergeStateStatus || null,
+        commit_status: commitStatus || null
+    };
+    core.debug(`statusResult: ${JSON.stringify(statusResult, null, 2)}`);
+    return statusResult;
 }
 
 
 /***/ }),
 
-/***/ 4814:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+/***/ 7868:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
-__nccwpck_require__.r(__webpack_exports__);
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   stringToArray: () => (/* binding */ stringToArray)
-/* harmony export */ });
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
-/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
 
-
-// Helper function to convert a String to an Array specifically in Actions
-// :param string: A comma separated string to convert to an array
-// :return Array: The function returns an Array - can be empty
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.stringToArray = stringToArray;
+const core = __importStar(__nccwpck_require__(7484));
 function stringToArray(string) {
-  try {
-    // Input validation - handle null, undefined, or non-string inputs
-    if (string === null || string === undefined || typeof string !== 'string') {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(
-        'in stringToArray(), invalid input was found so an empty Array was returned'
-      )
-      return []
+    try {
+        if (string === null || string === undefined || typeof string !== 'string') {
+            core.debug('in stringToArray(), invalid input was found so an empty Array was returned');
+            return [];
+        }
+        if (string.trim() === '') {
+            core.debug('in stringToArray(), an empty String was found so an empty Array was returned');
+            return [];
+        }
+        const stringArray = string.split(',').map(target => target.trim());
+        const results = [];
+        for (const item of stringArray) {
+            if (item === '') {
+                continue;
+            }
+            results.push(item);
+        }
+        return results;
     }
-
-    // If the String is empty, return an empty Array
-    if (string.trim() === '') {
-      _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(
-        'in stringToArray(), an empty String was found so an empty Array was returned'
-      )
-      return []
+    catch (error) {
+        core.error(`failed string for debugging purposes: ${string}`);
+        throw new Error(`could not convert String to Array - error: ${error}`);
     }
-
-    // Split up the String on commas, trim each element, and return the Array
-    const stringArray = string.split(',').map(target => target.trim())
-    const results = []
-
-    // filter out empty items
-    for (const item of stringArray) {
-      if (item === '') {
-        continue
-      }
-      results.push(item)
-    }
-
-    return results
-  } catch (error) {
-    /* istanbul ignore next */
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.error(`failed string for debugging purposes: ${string}`)
-    /* istanbul ignore next */
-    throw new Error(`could not convert String to Array - error: ${error}`)
-  }
 }
-
-
-/***/ }),
-
-/***/ 321:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
-
-"use strict";
-__nccwpck_require__.r(__webpack_exports__);
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   VERSION: () => (/* binding */ VERSION)
-/* harmony export */ });
-// The version of the this Action
-// Acceptable version formats:
-// - v1.0.0
-// - v4.5.1
-// - v10.123.44
-// - v1.1.1-rc.1
-// - etc
-
-const VERSION = 'v1.5.0'
 
 
 /***/ }),
@@ -32366,14 +32244,14 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.run = run;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
-const version_1 = __nccwpck_require__(321);
+const version_1 = __nccwpck_require__(311);
 const github_1 = __nccwpck_require__(3228);
 const plugin_retry_1 = __nccwpck_require__(3450);
-const colors_1 = __nccwpck_require__(1139);
-const status_1 = __nccwpck_require__(4757);
-const outputs_1 = __nccwpck_require__(2517);
-const string_to_array_1 = __nccwpck_require__(4814);
-const label_1 = __nccwpck_require__(7521);
+const colors_1 = __nccwpck_require__(9021);
+const status_1 = __nccwpck_require__(8123);
+const outputs_1 = __nccwpck_require__(1299);
+const string_to_array_1 = __nccwpck_require__(7868);
+const label_1 = __nccwpck_require__(8519);
 function determineLabelActions(pass, passLabels, failLabels, passLabelsCleanup) {
     if (pass) {
         return {
@@ -32439,6 +32317,18 @@ async function run() {
 if (process.env['CI'] === 'true' && process.env['JEST_TEST'] !== 'true') {
     run();
 }
+
+
+/***/ }),
+
+/***/ 311:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.VERSION = void 0;
+exports.VERSION = 'v1.5.0';
 
 
 /***/ }),
@@ -34349,46 +34239,6 @@ module.exports = parseParams
 /******/ 	}
 /******/ 	
 /************************************************************************/
-/******/ 	/* webpack/runtime/compat get default export */
-/******/ 	(() => {
-/******/ 		// getDefaultExport function for compatibility with non-harmony modules
-/******/ 		__nccwpck_require__.n = (module) => {
-/******/ 			var getter = module && module.__esModule ?
-/******/ 				() => (module['default']) :
-/******/ 				() => (module);
-/******/ 			__nccwpck_require__.d(getter, { a: getter });
-/******/ 			return getter;
-/******/ 		};
-/******/ 	})();
-/******/ 	
-/******/ 	/* webpack/runtime/define property getters */
-/******/ 	(() => {
-/******/ 		// define getter functions for harmony exports
-/******/ 		__nccwpck_require__.d = (exports, definition) => {
-/******/ 			for(var key in definition) {
-/******/ 				if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
-/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
-/******/ 				}
-/******/ 			}
-/******/ 		};
-/******/ 	})();
-/******/ 	
-/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
-/******/ 	(() => {
-/******/ 		__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
-/******/ 	})();
-/******/ 	
-/******/ 	/* webpack/runtime/make namespace object */
-/******/ 	(() => {
-/******/ 		// define __esModule on exports
-/******/ 		__nccwpck_require__.r = (exports) => {
-/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
-/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-/******/ 			}
-/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
-/******/ 		};
-/******/ 	})();
-/******/ 	
 /******/ 	/* webpack/runtime/compat */
 /******/ 	
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";

@@ -38,7 +38,7 @@ const core = __importStar(require("@actions/core"));
 async function label(issueNumber, context, octokit, labelsToAdd, labelsToRemove) {
     const { owner, repo } = context.repo;
     let addedLabels = [];
-    let removedLabels = [];
+    const removedLabels = [];
     if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
         core.info('🏷️ no labels to add or remove');
         return {

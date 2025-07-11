@@ -1,4 +1,4 @@
-import { stringToArray } from '../../src/functions/string-to-array'
+import {stringToArray} from '../../src/functions/string-to-array'
 import * as core from '@actions/core'
 
 const debugMock = jest.spyOn(core, 'debug')
@@ -49,7 +49,7 @@ test('handles undefined input gracefully', async () => {
 })
 
 test('handles non-string input gracefully', async () => {
-  expect(stringToArray(123 as any)).toStrictEqual([])
+  expect(stringToArray(123 as unknown as string)).toStrictEqual([])
   expect(debugMock).toHaveBeenCalledWith(
     'in stringToArray(), invalid input was found so an empty Array was returned'
   )

@@ -7,4 +7,4 @@ export const COLORS = {
   reset: '\u001b[0m' // reset
 } as const
 
-export type Color = typeof COLORS[keyof typeof COLORS]
+export type Color = (typeof COLORS)[keyof typeof COLORS]

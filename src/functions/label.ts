@@ -1,5 +1,5 @@
 import * as core from '@actions/core'
-import { GitHubContext, LabelResult, OctokitClient } from '../types'
+import {GitHubContext, LabelResult, OctokitClient} from '../types'
 
 /**
  * Helper function to add labels to a pull request
@@ -18,9 +18,9 @@ export async function label(
   labelsToRemove: string[]
 ): Promise<LabelResult> {
   // Get the owner, repo, and issue number from the context
-  const { owner, repo } = context.repo
+  const {owner, repo} = context.repo
   let addedLabels: string[] = [] // an array of labels that were actually added
-  let removedLabels: string[] = [] // an array of labels that were actually removed
+  const removedLabels: string[] = [] // an array of labels that were actually removed
 
   // exit early if there are no labels to add or remove
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
@@ -40,7 +40,9 @@ export async function label(
       repo: repo,
       issue_number: issueNumber
     })
-    const currentLabels: string[] = currentLabelsResult.data.map(label => label.name)
+    const currentLabels: string[] = currentLabelsResult.data.map(
+      label => label.name
+    )
 
     core.info(`current labels: ${currentLabels}`)
     core.info(`labels to remove: ${labelsToRemove}`)

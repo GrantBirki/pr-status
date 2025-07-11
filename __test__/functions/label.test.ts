@@ -1,6 +1,6 @@
-import { label } from '../../src/functions/label'
+import {label} from '../../src/functions/label'
 import * as core from '@actions/core'
-import { GitHubContext, OctokitClient } from '../../src/types'
+import {GitHubContext, OctokitClient} from '../../src/types'
 
 const issueNumber = 123
 
