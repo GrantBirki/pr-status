@@ -47,7 +47,6 @@ describe('outputs function', () => {
 
     expect(core.setOutput).toHaveBeenCalledWith('approved', 'true')
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
-    expect(core.info).toHaveBeenCalledWith(expect.stringContaining('PASS'))
   })
 
   test('should handle PR not cleanly mergeable', () => {
@@ -118,7 +117,6 @@ describe('outputs function', () => {
     outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
-    expect(core.info).toHaveBeenCalledWith(expect.stringContaining('PASS'))
   })
 
   test('should handle minimum approvals evaluation', () => {
@@ -135,7 +133,6 @@ describe('outputs function', () => {
     outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
-    expect(core.info).toHaveBeenCalledWith(expect.stringContaining('PASS'))
   })
 
   test('should fail minimum approvals evaluation if not met', () => {
@@ -171,7 +168,6 @@ describe('outputs function', () => {
     outputs(status, data)
 
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
-    expect(core.info).toHaveBeenCalledWith(expect.stringContaining('PASS'))
   })
 
   test('should handle unknown evaluation criteria', () => {

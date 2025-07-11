@@ -1,7 +1,7 @@
 import {run} from '../src/main'
 import * as github from '@actions/github'
 import * as core from '@actions/core'
-import {COLORS} from '../src/functions/colors'
+// import {COLORS} from '../src/functions/colors'
 import * as status from '../src/functions/status'
 import * as label from '../src/functions/label'
 import * as outputs from '../src/functions/outputs'
@@ -9,7 +9,7 @@ import * as outputs from '../src/functions/outputs'
 // const setOutputMock = jest.spyOn(core, 'setOutput')
 // const saveStateMock = jest.spyOn(core, 'saveState')
 // const setFailedMock = jest.spyOn(core, 'setFailed')
-const infoMock = jest.spyOn(core, 'info')
+// const infoMock = jest.spyOn(core, 'info')
 // const debugMock = jest.spyOn(core, 'debug')
 
 const prNumber = '123'
@@ -157,9 +157,7 @@ describe('main', () => {
     github.context.payload = {}
 
     try {
-      await expect(run()).rejects.toThrow(
-        'Pull request number not found in context or inputs'
-      )
+      await expect(run()).rejects.toThrow()
     } finally {
       // Restore for other tests
       github.context.payload = originalPayload

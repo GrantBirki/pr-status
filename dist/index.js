@@ -33531,7 +33531,7 @@ var github = __nccwpck_require__(3228);
 // - v1.1.1-rc.1
 // - etc
 
-const VERSION = 'v1.5.0'
+const VERSION = 'v1.6.0'
 
 // EXTERNAL MODULE: ./node_modules/@octokit/plugin-retry/dist-node/index.js
 var dist_node = __nccwpck_require__(3450);
@@ -34129,7 +34129,6 @@ function outputs(status, data) {
     'evaluation',
     pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
   )
-  core.info(`📊 Evaluation result: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass
 }
@@ -34407,8 +34406,7 @@ async function run() {
 
     // Evaluate the status and set outputs
     const pass = outputs(statusResult, data)
-    const passStatus = pass ? '✅ PASS' : '❌ FAIL'
-    core.info(`📊 Evaluation result: ${passStatus}`)
+    core.info(`📊 Evaluation result: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
     // Determine and apply label changes
     const {labelsToAdd, labelsToRemove} = determineLabelActions(
