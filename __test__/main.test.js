@@ -10,7 +10,7 @@ import * as outputs from '../src/functions/outputs'
 // const saveStateMock = jest.spyOn(core, 'saveState')
 // const setFailedMock = jest.spyOn(core, 'setFailed')
 const infoMock = jest.spyOn(core, 'info')
-const debugMock = jest.spyOn(core, 'debug')
+// const debugMock = jest.spyOn(core, 'debug')
 
 const prNumber = '123'
 
@@ -64,13 +64,13 @@ describe('main', () => {
     expect(infoMock).toHaveBeenCalledWith(
       `🏃 running status checks on pull request ${COLORS.highlight}${prNumber}${COLORS.reset}`
     )
-    expect(debugMock).toHaveBeenCalledWith(`pass: true`)
-    expect(debugMock).toHaveBeenCalledWith(`labelsToAdd: ready-for-deployment`)
-    expect(debugMock).toHaveBeenCalledWith(`labelsToAdd isArray: true`)
-    expect(debugMock).toHaveBeenCalledWith(
+    expect(infoMock).toHaveBeenCalledWith(`pass: true`)
+    expect(infoMock).toHaveBeenCalledWith(`labelsToAdd: ready-for-deployment`)
+    expect(infoMock).toHaveBeenCalledWith(`labelsToAdd isArray: true`)
+    expect(infoMock).toHaveBeenCalledWith(
       `labelsToRemove: needs-review,needs-review`
     )
-    expect(debugMock).toHaveBeenCalledWith(`labelsToRemove isArray: true`)
+    expect(infoMock).toHaveBeenCalledWith(`labelsToRemove isArray: true`)
   })
 
   test('runs the action when the PR is not in a "pass" state', async () => {
@@ -82,7 +82,7 @@ describe('main', () => {
     expect(infoMock).toHaveBeenCalledWith(
       `🏃 running status checks on pull request ${COLORS.highlight}${prNumber}${COLORS.reset}`
     )
-    expect(debugMock).toHaveBeenCalledWith(`pass: false`)
+    expect(infoMock).toHaveBeenCalledWith(`pass: false`)
   })
 
   test('should handle context fallback for pr number', async () => {

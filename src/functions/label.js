@@ -21,7 +21,7 @@ export async function label(
 
   // exit early if there are no labels to add or remove
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
-    core.debug('🏷️ no labels to add or remove')
+    core.info('🏷️ no labels to add or remove')
     return {
       added: [],
       removed: []
@@ -39,8 +39,8 @@ export async function label(
     })
     const currentLabels = currentLabelsResult.data.map(label => label.name)
 
-    core.debug(`current labels: ${currentLabels}`)
-    core.debug(`labels to remove: ${labelsToRemove}`)
+    core.info(`current labels: ${currentLabels}`)
+    core.info(`labels to remove: ${labelsToRemove}`)
 
     // Remove unwanted labels
     for (const label of labelsToRemove) {
@@ -54,7 +54,7 @@ export async function label(
         core.info(`🏷️ label removed: ${label}`)
         removedLabels.push(label)
       } else {
-        core.debug(`🏷️ label not found: '${label}' so it was not removed`)
+        core.info(`🏷️ label not found: '${label}' so it was not removed`)
       }
     }
   }

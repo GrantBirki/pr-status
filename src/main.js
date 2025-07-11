@@ -38,7 +38,7 @@ function determineLabelActions(
 
 export async function run() {
   try {
-    core.debug(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
+    core.info(`${COLORS.highlight}approve workflow is starting${COLORS.reset}`)
 
     // for debugging, dump the context object
     core.debug(`context: ${JSON.stringify(context, null, 2)}`)
@@ -96,7 +96,7 @@ export async function run() {
 
     // set the outputs
     const pass = outputs(statusResult, data)
-    core.debug(`pass: ${pass}`)
+    core.info(`pass: ${pass}`)
 
     // determine labels to add and remove based on evaluation result
     const {labelsToAdd, labelsToRemove} = determineLabelActions(
@@ -106,10 +106,10 @@ export async function run() {
       passLabelsCleanup
     )
 
-    core.debug(`labelsToAdd: ${labelsToAdd}`)
-    core.debug(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
-    core.debug(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
-    core.debug(`labelsToRemove: ${labelsToRemove}`)
+    core.info(`labelsToAdd: ${labelsToAdd}`)
+    core.info(`labelsToAdd isArray: ${Array.isArray(labelsToAdd)}`)
+    core.info(`labelsToRemove isArray: ${Array.isArray(labelsToRemove)}`)
+    core.info(`labelsToRemove: ${labelsToRemove}`)
 
     await label(prNumber, context, octokit, labelsToAdd, labelsToRemove)
 
