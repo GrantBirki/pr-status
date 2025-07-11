@@ -26,7 +26,11 @@ function getCheckStatus(check) {
  * @returns {boolean} True if successful
  */
 function isSuccessfulStatus(status) {
-  return [CHECK_STATUS.SUCCESS, CHECK_STATUS.SKIPPED, CHECK_STATUS.NEUTRAL].includes(status)
+  return [
+    CHECK_STATUS.SUCCESS,
+    CHECK_STATUS.SKIPPED,
+    CHECK_STATUS.NEUTRAL
+  ].includes(status)
 }
 
 /**
@@ -82,10 +86,12 @@ function logCheckResults(checks, checkType = 'check') {
     const isSuccessful = isSuccessfulStatus(checkStatus)
 
     if (isSuccessful) {
-      const prefix = checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
+      const prefix =
+        checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
       core.info(`✅ ${prefix} '${checkName}': ${checkStatus}`)
     } else {
-      const prefix = checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
+      const prefix =
+        checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
       core.info(`❌ ${prefix} '${checkName}': ${checkStatus} (FAILING)`)
       hasFailingCheck = true
     }
@@ -149,10 +155,7 @@ function processRequiredChecks(result, checksToExclude) {
 
   // Filter to required checks only, then exclude specified checks
   const requiredChecks = allChecks.filter(x => x.isRequired)
-  const filteredChecks = filterExcludedChecks(
-    requiredChecks,
-    checksToExclude
-  )
+  const filteredChecks = filterExcludedChecks(requiredChecks, checksToExclude)
 
   core.info(
     `Evaluating ${filteredChecks.length} required checks (after exclusions)`
@@ -194,9 +197,7 @@ function processAllChecks(result, checksToExclude) {
 
   // If all other checks are successful, return SUCCESS, otherwise use the overall state
   if (filteredChecks.length === 0) {
-    core.info(
-      '💡 no other CI checks found after filtering out excluded checks'
-    )
+    core.info('💡 no other CI checks found after filtering out excluded checks')
     return null
   }
 
@@ -207,13 +208,13 @@ function processAllChecks(result, checksToExclude) {
   const allSuccessful = areAllChecksSuccessful(filteredChecks)
   const commitStatus = allSuccessful
     ? PR_STATUS.SUCCESS
-    : result.repository.pullRequest.commits.nodes[0].commit
-        .statusCheckRollup.state
+    : result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+        .state
 
   // Log overall status summary
   const overallState =
-    result.repository.pullRequest.commits.nodes[0].commit
-      .statusCheckRollup.state
+    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+      .state
   logOverallStatus(hasFailingCheck, CHECK_TYPES.ALL, overallState)
 
   return commitStatus

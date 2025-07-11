@@ -17,7 +17,12 @@ import {label} from './functions/label'
  * @param {Array} passLabelsCleanup - Labels to remove when passing
  * @returns {Object} Object with labelsToAdd and labelsToRemove arrays
  */
-function determineLabelActions(pass, passLabels, failLabels, passLabelsCleanup) {
+function determineLabelActions(
+  pass,
+  passLabels,
+  failLabels,
+  passLabelsCleanup
+) {
   if (pass) {
     return {
       labelsToAdd: passLabels,

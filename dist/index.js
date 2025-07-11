@@ -33598,6 +33598,7 @@ const CHECK_TYPES = {
   REQUIRED: 'required',
   ALL: 'all'
 }
+
 ;// CONCATENATED MODULE: ./src/functions/status.js
 
 
@@ -33627,7 +33628,11 @@ function getCheckStatus(check) {
  * @returns {boolean} True if successful
  */
 function isSuccessfulStatus(status) {
-  return [CHECK_STATUS.SUCCESS, CHECK_STATUS.SKIPPED, CHECK_STATUS.NEUTRAL].includes(status)
+  return [
+    CHECK_STATUS.SUCCESS,
+    CHECK_STATUS.SKIPPED,
+    CHECK_STATUS.NEUTRAL
+  ].includes(status)
 }
 
 /**
@@ -33683,10 +33688,12 @@ function logCheckResults(checks, checkType = 'check') {
     const isSuccessful = isSuccessfulStatus(checkStatus)
 
     if (isSuccessful) {
-      const prefix = checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
+      const prefix =
+        checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
       core.info(`✅ ${prefix} '${checkName}': ${checkStatus}`)
     } else {
-      const prefix = checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
+      const prefix =
+        checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
       core.info(`❌ ${prefix} '${checkName}': ${checkStatus} (FAILING)`)
       hasFailingCheck = true
     }
@@ -33750,10 +33757,7 @@ function processRequiredChecks(result, checksToExclude) {
 
   // Filter to required checks only, then exclude specified checks
   const requiredChecks = allChecks.filter(x => x.isRequired)
-  const filteredChecks = filterExcludedChecks(
-    requiredChecks,
-    checksToExclude
-  )
+  const filteredChecks = filterExcludedChecks(requiredChecks, checksToExclude)
 
   core.info(
     `Evaluating ${filteredChecks.length} required checks (after exclusions)`
@@ -33795,9 +33799,7 @@ function processAllChecks(result, checksToExclude) {
 
   // If all other checks are successful, return SUCCESS, otherwise use the overall state
   if (filteredChecks.length === 0) {
-    core.info(
-      '💡 no other CI checks found after filtering out excluded checks'
-    )
+    core.info('💡 no other CI checks found after filtering out excluded checks')
     return null
   }
 
@@ -33808,13 +33810,13 @@ function processAllChecks(result, checksToExclude) {
   const allSuccessful = areAllChecksSuccessful(filteredChecks)
   const commitStatus = allSuccessful
     ? PR_STATUS.SUCCESS
-    : result.repository.pullRequest.commits.nodes[0].commit
-        .statusCheckRollup.state
+    : result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+        .state
 
   // Log overall status summary
   const overallState =
-    result.repository.pullRequest.commits.nodes[0].commit
-      .statusCheckRollup.state
+    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
+      .state
   logOverallStatus(hasFailingCheck, CHECK_TYPES.ALL, overallState)
 
   return commitStatus
@@ -33973,79 +33975,80 @@ function outputs(status, data) {
     core.setOutput('evaluation', null)
   }
 
-/**
- * Parse and validate min_approvals evaluation criteria
- * @param {string} evaluation - The evaluation string (e.g., "min_approvals=2")
- * @returns {number} The minimum number of approvals required
- * @throws {Error} If the parsing fails or number is invalid
- */
-function parseMinApprovals(evaluation) {
-  const parts = evaluation.split('=')
-  if (parts.length !== 2) {
-    throw new Error(`Invalid min_approvals format: ${evaluation}`)
-  }
-  
-  const minApprovals = parseInt(parts[1], 10)
-  if (isNaN(minApprovals) || minApprovals < 0) {
-    throw new Error(`Invalid min_approvals value: ${parts[1]}`)
-  }
-  
-  return minApprovals
-}
+  /**
+   * Parse and validate min_approvals evaluation criteria
+   * @param {string} evaluation - The evaluation string (e.g., "min_approvals=2")
+   * @returns {number} The minimum number of approvals required
+   * @throws {Error} If the parsing fails or number is invalid
+   */
+  function parseMinApprovals(evaluation) {
+    const parts = evaluation.split('=')
+    if (parts.length !== 2) {
+      throw new Error(`Invalid min_approvals format: ${evaluation}`)
+    }
 
-/**
- * Evaluate a single evaluation criteria
- * @param {string} evaluation - The evaluation criteria to check
- * @param {Object} status - The status object containing PR information
- * @returns {boolean} True if the evaluation passes, false otherwise
- */
-function evaluateCriteria(evaluation, status) {
-  if (evaluation === EVALUATION_CRITERIA.APPROVED) {
-    if (
-      status.review_decision !== REVIEW_DECISION.APPROVED &&
-      status.review_decision !== null
-    ) {
-      core.warning(`evaluation '${evaluation}' failed - PR is not approved`)
-      return false
+    const minApprovals = parseInt(parts[1], 10)
+    if (isNaN(minApprovals) || minApprovals < 0) {
+      throw new Error(`Invalid min_approvals value: ${parts[1]}`)
     }
-  } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
-    if (status.merge_state_status !== 'CLEAN') {
-      core.warning(
-        `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
-      )
-      return false
-    }
-  } else if (evaluation === EVALUATION_CRITERIA.CI_PASSING) {
-    if (status.commit_status !== PR_STATUS.SUCCESS && status.commit_status !== null) {
-      core.warning(
-        `evaluation '${evaluation}' failed - commit status is not successful`
-      )
-      return false
-    }
-  } else if (evaluation.includes(EVALUATION_CRITERIA.MIN_APPROVALS)) {
-    try {
-      const minApprovals = parseMinApprovals(evaluation)
-      if (status.total_approvals < minApprovals) {
+
+    return minApprovals
+  }
+
+  /**
+   * Evaluate a single evaluation criteria
+   * @param {string} evaluation - The evaluation criteria to check
+   * @param {Object} status - The status object containing PR information
+   * @returns {boolean} True if the evaluation passes, false otherwise
+   */
+  function evaluateCriteria(evaluation, status) {
+    if (evaluation === EVALUATION_CRITERIA.APPROVED) {
+      if (
+        status.review_decision !== REVIEW_DECISION.APPROVED &&
+        status.review_decision !== null
+      ) {
+        core.warning(`evaluation '${evaluation}' failed - PR is not approved`)
+        return false
+      }
+    } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
+      if (status.merge_state_status !== 'CLEAN') {
         core.warning(
-          `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
+          `evaluation '${evaluation}' failed - PR is not cleanly mergeable`
         )
         return false
       }
-    } catch (error) {
+    } else if (evaluation === EVALUATION_CRITERIA.CI_PASSING) {
+      if (
+        status.commit_status !== PR_STATUS.SUCCESS &&
+        status.commit_status !== null
+      ) {
+        core.warning(
+          `evaluation '${evaluation}' failed - commit status is not successful`
+        )
+        return false
+      }
+    } else if (evaluation.includes(EVALUATION_CRITERIA.MIN_APPROVALS)) {
+      try {
+        const minApprovals = parseMinApprovals(evaluation)
+        if (status.total_approvals < minApprovals) {
+          core.warning(
+            `evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals as configured by this action`
+          )
+          return false
+        }
+      } catch (error) {
+        core.warning(`evaluation '${evaluation}' failed - ${error.message}`)
+        return false
+      }
+    } else {
       core.warning(
-        `evaluation '${evaluation}' failed - ${error.message}`
+        `evaluation '${evaluation}' failed - unknown evaluation criteria`
       )
       return false
     }
-  } else {
-    core.warning(
-      `evaluation '${evaluation}' failed - unknown evaluation criteria`
-    )
-    return false
+
+    return true
   }
-  
-  return true
-}
 
   // iterate over all the evaluations and check them
   let pass = true
@@ -34055,7 +34058,10 @@ function evaluateCriteria(evaluation, status) {
     }
   })
 
-  core.setOutput('evaluation', pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL)
+  core.setOutput(
+    'evaluation',
+    pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
+  )
   core.debug(`evaluation: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
 
   return pass
@@ -34208,7 +34214,12 @@ async function label(
  * @param {Array} passLabelsCleanup - Labels to remove when passing
  * @returns {Object} Object with labelsToAdd and labelsToRemove arrays
  */
-function determineLabelActions(pass, passLabels, failLabels, passLabelsCleanup) {
+function determineLabelActions(
+  pass,
+  passLabels,
+  failLabels,
+  passLabelsCleanup
+) {
   if (pass) {
     return {
       labelsToAdd: passLabels,
