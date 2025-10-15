@@ -42,7 +42,8 @@ export const EVALUATION_CRITERIA = {
   APPROVED: 'approved',
   MERGEABLE: 'mergeable',
   CI_PASSING: 'ci_passing',
-  MIN_APPROVALS: 'min_approvals'
+  MIN_APPROVALS: 'min_approvals',
+  NOT_DRAFT: 'not_draft'
 }
 
 // Constants for check types

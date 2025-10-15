@@ -40,6 +40,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -90,6 +91,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS'
     })
@@ -108,6 +110,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -152,6 +155,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS'
     })
@@ -209,6 +213,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'BLOCKED',
       mergeable_state: null,
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'FAILURE'
     })
@@ -239,6 +244,7 @@ describe('status function', () => {
       review_decision: null,
       merge_state_status: null,
       mergeable_state: null,
+      is_draft: false,
       total_approvals: null,
       commit_status: null
     })
@@ -251,6 +257,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           }
@@ -262,6 +269,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: null
     })
@@ -276,6 +284,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -322,6 +331,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS' // Should be SUCCESS because pr-status check was excluded
     })
@@ -343,6 +353,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -389,6 +400,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: null // Should be null because all checks were filtered out
     })
@@ -410,6 +422,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -456,6 +469,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'FAILURE' // Should use overall state since not all checks pass
     })
@@ -471,6 +485,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -507,6 +522,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS'
     })
@@ -526,6 +542,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -567,6 +584,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS'
     })
@@ -588,6 +606,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -639,6 +658,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS' // Should be SUCCESS because 'test foo' and 'test bar' are still passing
     })
@@ -669,6 +689,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -699,6 +720,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: null // Should be null when no checks found
     })
@@ -719,6 +741,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -755,6 +778,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS' // Should be SUCCESS when no required checks remain
     })
@@ -774,6 +798,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -810,6 +835,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS'
     })
@@ -832,6 +858,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -868,6 +895,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS'
     })
@@ -886,6 +914,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -924,6 +953,7 @@ describe('status function', () => {
       review_decision: 'APPROVED',
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
+      is_draft: false,
       total_approvals: 1,
       commit_status: 'SUCCESS' // Should use overall state since check is UNKNOWN
     })
@@ -947,6 +977,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
@@ -1007,6 +1038,7 @@ describe('status function', () => {
           reviewDecision: 'APPROVED',
           mergeStateStatus: 'CLEAN',
           mergeable: 'MERGEABLE',
+          isDraft: false,
           reviews: {
             totalCount: 1
           },
