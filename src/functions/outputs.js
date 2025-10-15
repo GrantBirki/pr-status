@@ -21,6 +21,7 @@ export function outputs(status, data) {
   core.setOutput('merge_state_status', status.merge_state_status || null)
   core.setOutput('commit_status', status.commit_status || null)
   core.setOutput('mergeable_state', status.mergeable_state || null)
+  core.setOutput('is_draft', status.is_draft ? 'true' : 'false')
 
   // Set the approved output depending on the review decision
   if (status.review_decision === REVIEW_DECISION.APPROVED) {
@@ -97,6 +98,13 @@ export function outputs(status, data) {
       ) {
         core.warning(
           `⚠️ Evaluation '${evaluation}' failed - commit status is not successful`
+        )
+        return false
+      }
+    } else if (evaluation === EVALUATION_CRITERIA.NOT_DRAFT) {
+      if (status.is_draft === true) {
+        core.warning(
+          `⚠️ Evaluation '${evaluation}' failed - PR is in draft status`
         )
         return false
       }

@@ -33590,7 +33590,8 @@ const EVALUATION_CRITERIA = {
   APPROVED: 'approved',
   MERGEABLE: 'mergeable',
   CI_PASSING: 'ci_passing',
-  MIN_APPROVALS: 'min_approvals'
+  MIN_APPROVALS: 'min_approvals',
+  NOT_DRAFT: 'not_draft'
 }
 
 // Constants for check types
@@ -33857,6 +33858,7 @@ const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
       reviewDecision
       mergeStateStatus
       mergeable
+      isDraft
       commits(last: 1) {
         nodes {
           commit {
@@ -33982,11 +33984,13 @@ function extractStatusResult(result, commitStatus) {
     merge_state_status:
       result?.repository?.pullRequest?.mergeStateStatus || null,
     mergeable_state: result?.repository?.pullRequest?.mergeable || null,
+    is_draft: result?.repository?.pullRequest?.isDraft || false,
     commit_status: commitStatus || null
   }
 
   core.info(`📊 Merge State Status: ${statusResult.merge_state_status}`)
   core.info(`📊 Mergeable State: ${statusResult.mergeable_state}`)
+  core.info(`📊 Is Draft: ${statusResult.is_draft}`)
 
   core.debug(`📊 Status result: ${JSON.stringify(statusResult, null, 2)}`)
   return statusResult
@@ -34042,6 +34046,7 @@ function outputs(status, data) {
   core.setOutput('merge_state_status', status.merge_state_status || null)
   core.setOutput('commit_status', status.commit_status || null)
   core.setOutput('mergeable_state', status.mergeable_state || null)
+  core.setOutput('is_draft', status.is_draft ? 'true' : 'false')
 
   // Set the approved output depending on the review decision
   if (status.review_decision === REVIEW_DECISION.APPROVED) {
@@ -34118,6 +34123,13 @@ function outputs(status, data) {
       ) {
         core.warning(
           `⚠️ Evaluation '${evaluation}' failed - commit status is not successful`
+        )
+        return false
+      }
+    } else if (evaluation === EVALUATION_CRITERIA.NOT_DRAFT) {
+      if (status.is_draft === true) {
+        core.warning(
+          `⚠️ Evaluation '${evaluation}' failed - PR is in draft status`
         )
         return false
       }

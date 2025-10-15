@@ -22,7 +22,7 @@ inputs:
     default: all
     required: true
   evaluations:
-    description: 'The attributes (comma separated list) to evaluate the pull request against when determining its status on a PASS/FAIL system. This plays into the `evaluation` output. Full example: approved,ci_passing,mergeable'
+    description: 'The attributes (comma separated list) to evaluate the pull request against when determining its status on a PASS/FAIL system. This plays into the `evaluation` output. Full example: approved,ci_passing,mergeable,not_draft'
     default: 'approved' # this says that the pull request must be approved and that is it
     required: false
   pass_labels:
@@ -54,6 +54,8 @@ outputs:
     description: 'The mergeable state of the pull request - Examples: "MERGEABLE", "UNSTABLE", "CONFLICTING", "UNKNOWN", etc'
   commit_status:
     description: 'The ci status for the latest commit on the pull request - Examples: "SUCCESS", "FAILURE", "PENDING", `null`, etc'
+  is_draft:
+    description: 'The string "true" if the pull request is in draft status, "false" otherwise'
   evaluation:
     description: 'The overall evaluation of the pull request based on the evaluations input - Examples: "PASS", "FAIL"'
 runs:

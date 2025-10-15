@@ -39,6 +39,7 @@ Depending on the inputs provided, this Action will check the "status" of a pull 
 | `merge_state_status` | The status of the pull request merge state - Examples: `"CLEAN"`, `"DIRTY"`, `"UNKNOWN"`, `"DRAFT"`, `"BLOCKED"`, etc |
 | `mergeable_state` | The mergeable state of the pull request - Examples: `"MERGEABLE"`, `"UNSTABLE"`, `"CONFLICTING"`, `"UNKNOWN"`, etc |
 | `commit_status` | The ci status for the latest commit on the pull request - Examples: `"SUCCESS"`, `"FAILURE"`, `"PENDING"`, `null`, etc |
+| `is_draft` | The string "true" if the pull request is in draft status, "false" otherwise |
 | `evaluation` | The overall evaluation of the pull request based on the `evaluations` input - Examples: `"PASS"`, `"FAIL"` |
 
 ## Evaluations 🧮
@@ -49,6 +50,7 @@ The evaluations input allows you to specify which attributes to evaluate the pul
 - `ci_passing`: Checks if the latest commit on the pull request has passing CI checks
 - `mergeable`: Checks if the pull request is in a cleanly mergeable state
 - `min_approvals=N`: Checks if the pull request has at least N approvals (e.g., `min_approvals=2`)
+- `not_draft`: Checks if the pull request is not in draft status
 
 > [!TIP]  
 > When using the `ci_passing` evaluation, this action will automatically exclude itself from the CI check evaluation to avoid circular dependencies. You can customize which checks to exclude using the `exclude_checks` input parameter.
@@ -60,6 +62,8 @@ Here are a few examples of how to use the evaluations input:
 - `evaluations: approved,mergeable,min_approvals=2` - Checks if the pull request is approved, mergeable, and has at least 2 approvals
 - `evaluations: approved,ci_passing,mergeable,min_approvals=2` - Checks if the pull request is approved, has passing CI, is mergeable, and has at least 2 approvals
 - `evaluations: min_approvals=1` - Checks if the pull request has at least 1 approval (does not even need to be in an approved state for this to pass). This can be useful if you want to check that at least someone has looked at the PR, but you don't care about the full approval state.
+- `evaluations: not_draft` - Checks if the pull request is not in draft status. This can be useful when combined with label automation to prevent applying labels to draft PRs.
+- `evaluations: approved,not_draft,ci_passing` - Checks if the pull request is approved, not in draft status, and has passing CI
 
 ## Usage 💻
 
@@ -102,6 +106,7 @@ jobs:
           echo "merge state status ${{ steps.pr-status.outputs.merge_state_status }}"
           echo "commit status ${{ steps.pr-status.outputs.commit_status }}"
           echo "review decision ${{ steps.pr-status.outputs.review_decision }}"
+          echo "is draft ${{ steps.pr-status.outputs.is_draft }}"
           echo "...."
 ```
 

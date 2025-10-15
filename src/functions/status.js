@@ -255,6 +255,7 @@ const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
       reviewDecision
       mergeStateStatus
       mergeable
+      isDraft
       commits(last: 1) {
         nodes {
           commit {
@@ -380,11 +381,13 @@ function extractStatusResult(result, commitStatus) {
     merge_state_status:
       result?.repository?.pullRequest?.mergeStateStatus || null,
     mergeable_state: result?.repository?.pullRequest?.mergeable || null,
+    is_draft: result?.repository?.pullRequest?.isDraft || false,
     commit_status: commitStatus || null
   }
 
   core.info(`📊 Merge State Status: ${statusResult.merge_state_status}`)
   core.info(`📊 Mergeable State: ${statusResult.mergeable_state}`)
+  core.info(`📊 Is Draft: ${statusResult.is_draft}`)
 
   core.debug(`📊 Status result: ${JSON.stringify(statusResult, null, 2)}`)
   return statusResult

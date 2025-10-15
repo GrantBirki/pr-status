@@ -17,7 +17,8 @@ describe('outputs function', () => {
       total_approvals: 2,
       merge_state_status: 'CLEAN',
       mergeable_state: 'MERGEABLE',
-      commit_status: 'SUCCESS'
+      commit_status: 'SUCCESS',
+      is_draft: false
     }
     const data = {
       evaluations: ['approved', 'mergeable', 'ci_passing']
@@ -29,6 +30,7 @@ describe('outputs function', () => {
     expect(core.setOutput).toHaveBeenCalledWith('total_approvals', 2)
     expect(core.setOutput).toHaveBeenCalledWith('merge_state_status', 'CLEAN')
     expect(core.setOutput).toHaveBeenCalledWith('commit_status', 'SUCCESS')
+    expect(core.setOutput).toHaveBeenCalledWith('is_draft', 'false')
     expect(core.setOutput).toHaveBeenCalledWith('approved', 'true')
     expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
     expect(result).toBe(true)
@@ -241,5 +243,112 @@ describe('outputs function', () => {
     expect(core.warning).toHaveBeenCalledWith(
       expect.stringContaining('Invalid min_approvals value')
     )
+  })
+
+  test('should pass not_draft evaluation when PR is not a draft', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS',
+      is_draft: false
+    }
+    const data = {
+      evaluations: ['not_draft']
+    }
+
+    const result = outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
+    expect(result).toBe(true)
+  })
+
+  test('should fail not_draft evaluation when PR is a draft', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS',
+      is_draft: true
+    }
+    const data = {
+      evaluations: ['not_draft']
+    }
+
+    const result = outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('PR is in draft status')
+    )
+    expect(result).toBe(false)
+  })
+
+  test('should handle multiple evaluations including not_draft', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS',
+      is_draft: false
+    }
+    const data = {
+      evaluations: ['approved', 'not_draft', 'ci_passing']
+    }
+
+    const result = outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'PASS')
+    expect(result).toBe(true)
+  })
+
+  test('should fail when one evaluation fails even if not_draft passes', () => {
+    const status = {
+      review_decision: 'CHANGES_REQUESTED',
+      merge_state_status: 'CLEAN',
+      commit_status: 'SUCCESS',
+      is_draft: false
+    }
+    const data = {
+      evaluations: ['approved', 'not_draft']
+    }
+
+    const result = outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('evaluation', 'FAIL')
+    expect(result).toBe(false)
+  })
+
+  test('should set is_draft output to "true" when PR is in draft status', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      total_approvals: 2,
+      merge_state_status: 'CLEAN',
+      mergeable_state: 'MERGEABLE',
+      commit_status: 'SUCCESS',
+      is_draft: true
+    }
+    const data = {
+      evaluations: ['approved']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('is_draft', 'true')
+  })
+
+  test('should set is_draft output to "false" when PR is not in draft status', () => {
+    const status = {
+      review_decision: 'APPROVED',
+      total_approvals: 2,
+      merge_state_status: 'CLEAN',
+      mergeable_state: 'MERGEABLE',
+      commit_status: 'SUCCESS',
+      is_draft: false
+    }
+    const data = {
+      evaluations: ['approved']
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('is_draft', 'false')
   })
 })
