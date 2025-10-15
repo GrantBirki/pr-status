@@ -156,13 +156,11 @@ describe('main', () => {
     const originalPayload = github.context.payload
     github.context.payload = {}
 
-    try {
-      await expect(run()).rejects.toThrow()
-    } finally {
-      // Restore for other tests
-      github.context.payload = originalPayload
-      process.env.INPUT_PR_NUMBER = prNumber
-    }
+    await expect(run()).rejects.toThrow()
+
+    // Restore for other tests
+    github.context.payload = originalPayload
+    process.env.INPUT_PR_NUMBER = prNumber
   })
 
   test('should handle errors gracefully', async () => {

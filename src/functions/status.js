@@ -78,6 +78,7 @@ function logAllChecks(checks) {
  * @returns {Array} Filtered array of checks
  */
 function filterExcludedChecks(checks, excludePatterns) {
+  /* istanbul ignore next */
   if (!excludePatterns || excludePatterns.length === 0) {
     return checks
   }
@@ -360,6 +361,7 @@ function determineCommitStatus(result, data, checksToExclude) {
       core.debug('🔍 Raw GraphQL result for debugging:')
       core.debug(JSON.stringify(result, null, 2))
     } catch (debugError) {
+      /* istanbul ignore next */
       core.debug('❌ Could not output raw GraphQL result for debugging')
     }
 

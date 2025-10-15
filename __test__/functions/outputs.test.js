@@ -351,4 +351,27 @@ describe('outputs function', () => {
 
     expect(core.setOutput).toHaveBeenCalledWith('is_draft', 'false')
   })
+
+  test('should handle missing/null status values with defaults', () => {
+    const status = {
+      review_decision: null,
+      total_approvals: null,
+      merge_state_status: null,
+      mergeable_state: null,
+      commit_status: null,
+      is_draft: false
+    }
+    const data = {
+      evaluations: []
+    }
+
+    outputs(status, data)
+
+    expect(core.setOutput).toHaveBeenCalledWith('review_decision', null)
+    expect(core.setOutput).toHaveBeenCalledWith('total_approvals', 0)
+    expect(core.setOutput).toHaveBeenCalledWith('merge_state_status', null)
+    expect(core.setOutput).toHaveBeenCalledWith('commit_status', null)
+    expect(core.setOutput).toHaveBeenCalledWith('mergeable_state', null)
+    expect(core.setOutput).toHaveBeenCalledWith('is_draft', 'false')
+  })
 })
