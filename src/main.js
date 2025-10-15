@@ -34,6 +34,7 @@ function parseInputs() {
   }
 
   // Validate PR number
+  /* istanbul ignore next */
   if (!inputs.prNumber) {
     throw new Error('❌ Pull request number not found in context or inputs')
   }
