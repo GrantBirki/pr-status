@@ -1,478 +1,339 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {status} from '../../src/functions/status.ts'
+import {
+  aggregateCheckStatuses,
+  countUniqueApprovals,
+  determineCommitStatus,
+  normalizeCheckStatus,
+  parseCheckSelection,
+  parsePullRequestNumber,
+  status
+} from '../../src/functions/status.ts'
 import type {
-  ActionContext,
-  GraphqlClient,
-  StatusResult
-} from '../../src/types.ts'
+  GitHubCheck,
+  GitHubReview,
+  PullRequestStatusClient,
+  PullRequestStatusData
+} from '../../src/functions/status.ts'
 import {createRecordingCore, includesMessage} from './helpers.ts'
 
-interface CheckFixture {
-  isRequired?: boolean | null
-  conclusion?: string | null
-  status?: string | null
-  state?: string | null
-  name?: string | null
-  context?: string | null
-  [key: string]: unknown
-}
-
-interface ResultOptions {
-  reviewDecision?: string | null
-  totalApprovals?: number | null
-  mergeStateStatus?: string | null
-  mergeable?: string | null
-  isDraft?: boolean | null
-  checkSuiteCount?: number
-  rollupState?: string | null
-}
-
-interface GraphqlRecording {
-  client: GraphqlClient
-  calls: Array<{query: string; variables: Record<string, unknown>}>
-}
-
-function createResult(
-  checks: CheckFixture[],
-  options: ResultOptions = {}
-): unknown {
-  const {
-    reviewDecision = 'APPROVED',
-    totalApprovals = 1,
-    mergeStateStatus = 'CLEAN',
-    mergeable = 'MERGEABLE',
-    isDraft = false,
-    checkSuiteCount = checks.length === 0 ? 0 : 1,
-    rollupState = 'SUCCESS'
-  } = options
-
+function checkRun(
+  name: string,
+  conclusion: string | null,
+  statusValue = conclusion === null ? 'IN_PROGRESS' : 'COMPLETED',
+  isRequired = true
+): GitHubCheck {
   return {
-    repository: {
-      pullRequest: {
-        reviewDecision,
-        mergeStateStatus,
-        mergeable,
-        isDraft,
-        reviews: {totalCount: totalApprovals},
-        commits: {
-          nodes: [
-            {
-              commit: {
-                checkSuites: {totalCount: checkSuiteCount},
-                statusCheckRollup: {
-                  state: rollupState,
-                  contexts: {nodes: checks}
-                }
-              }
-            }
-          ]
-        }
+    __typename: 'CheckRun',
+    name,
+    isRequired,
+    conclusion,
+    status: statusValue
+  }
+}
+
+function statusContext(
+  context: string,
+  state: string | null,
+  isRequired = true
+): GitHubCheck {
+  return {__typename: 'StatusContext', context, isRequired, state}
+}
+
+function review(
+  login: string,
+  state = 'APPROVED',
+  typename = 'User'
+): GitHubReview {
+  return {state, author: {__typename: typename, login}}
+}
+
+function pullRequest(
+  overrides: Partial<PullRequestStatusData> = {}
+): PullRequestStatusData {
+  return {
+    reviewDecision: 'APPROVED',
+    mergeStateStatus: 'CLEAN',
+    mergeable: 'MERGEABLE',
+    isDraft: false,
+    checks: [checkRun('build', 'SUCCESS')],
+    latestReviews: [review('octocat')],
+    ...overrides
+  }
+}
+
+function recordingClient(response: PullRequestStatusData): {
+  client: PullRequestStatusClient
+  requests: Array<{owner: string; repo: string; number: number}>
+} {
+  const requests: Array<{owner: string; repo: string; number: number}> = []
+  return {
+    requests,
+    client: {
+      async getPullRequestStatus(request) {
+        requests.push(request)
+        return response
       }
     }
   }
 }
 
-function createGraphql(response: unknown): GraphqlRecording {
-  const calls: Array<{query: string; variables: Record<string, unknown>}> = []
-  const client: GraphqlClient = {
-    async graphql(query, variables) {
-      calls.push({query, variables})
-      return response
-    }
+test('parses only positive safe pull request numbers', () => {
+  assert.equal(parsePullRequestNumber('42'), 42)
+  assert.equal(parsePullRequestNumber(7), 7)
+
+  for (const invalid of [
+    null,
+    true,
+    '',
+    '   ',
+    'not-a-number',
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1
+  ]) {
+    assert.throws(
+      () => parsePullRequestNumber(invalid),
+      /pr_number must be a positive safe integer/
+    )
   }
-  return {client, calls}
-}
+})
 
-function createRejectingGraphql(reason: unknown): GraphqlClient {
-  return {
-    async graphql() {
-      throw reason
-    }
+test('accepts only exact check selections', () => {
+  assert.equal(parseCheckSelection('all'), 'all')
+  assert.equal(parseCheckSelection('required'), 'required')
+  assert.throws(
+    () => parseCheckSelection('ALL'),
+    /checks must be exactly 'all' or 'required'/
+  )
+})
+
+test('normalizes every documented successful check state', () => {
+  for (const state of ['SUCCESS', 'SKIPPED', 'NEUTRAL']) {
+    assert.equal(normalizeCheckStatus(statusContext(state, state)), 'SUCCESS')
+    assert.equal(normalizeCheckStatus(checkRun(state, state)), 'SUCCESS')
   }
-}
-
-const context: ActionContext = {
-  workflow: 'pr-status / test',
-  repo: {owner: 'octocat', repo: 'example'}
-}
-
-const passingResult: StatusResult = {
-  review_decision: 'APPROVED',
-  total_approvals: 1,
-  merge_state_status: 'CLEAN',
-  mergeable_state: 'MERGEABLE',
-  is_draft: false,
-  commit_status: 'SUCCESS'
-}
-
-test('gets PR metadata and treats successful, skipped, and neutral checks as successful', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult([
-      {isRequired: true, conclusion: 'success', name: 'build'},
-      {isRequired: false, conclusion: 'SKIPPED', name: 'docs'},
-      {isRequired: false, conclusion: 'NEUTRAL', name: 'analysis'},
-      {isRequired: false, state: 'SUCCESS', context: 'legacy-status'}
-    ])
-  )
-
-  const result = await status(
-    graphql.client,
-    context,
-    '42',
-    {checks: 'all'},
-    {core: recording.core}
-  )
-
-  assert.deepEqual(result, passingResult)
-  assert.equal(graphql.calls.length, 1)
-  const call = graphql.calls[0]
-  assert.ok(call)
-  assert.match(call.query, /contexts\(first:100\)/)
-  assert.deepEqual(call.variables, {
-    owner: 'octocat',
-    name: 'example',
-    number: 42,
-    headers: {Accept: 'application/vnd.github.merge-info-preview+json'}
-  })
-  assert.ok(includesMessage(recording.info, 'Found 4 total CI checks'))
-  assert.ok(
-    includesMessage(
-      recording.info,
-      'check: legacy-status (optional) - state: SUCCESS'
-    )
-  )
-  assert.ok(includesMessage(recording.info, 'Overall CI status: SUCCESS'))
 })
 
-test('uses the rollup state when any check is not successful', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult(
-      [
-        {isRequired: true, conclusion: 'FAILURE', name: 'build'},
-        {
-          isRequired: false,
-          conclusion: null,
-          status: 'IN_PROGRESS',
-          name: 'integration'
-        }
-      ],
-      {rollupState: 'PENDING'}
-    )
-  )
-
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'all', excludeChecks: []},
-    {core: recording.core}
-  )
-
-  assert.equal(result.commit_status, 'PENDING')
-  assert.ok(
-    includesMessage(recording.info, 'integration (optional) - state: IN_PROGRESS')
-  )
-  assert.ok(includesMessage(recording.info, "Check 'build': FAILURE (FAILING)"))
-  assert.ok(includesMessage(recording.info, 'Overall CI status: PENDING'))
+test('normalizes every documented pending check state', () => {
+  for (const state of [
+    'PENDING',
+    'EXPECTED',
+    'QUEUED',
+    'IN_PROGRESS',
+    'WAITING',
+    'REQUESTED'
+  ]) {
+    assert.equal(normalizeCheckStatus(statusContext(state, state)), 'PENDING')
+    assert.equal(normalizeCheckStatus(checkRun(state, null, state)), 'PENDING')
+  }
 })
 
-test('evaluates only required checks and reports required failures', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult([
-      {isRequired: true, conclusion: 'SUCCESS', name: 'required-pass'},
-      {isRequired: true, conclusion: 'FAILURE', name: 'required-fail'},
-      {isRequired: false, conclusion: 'FAILURE', name: 'optional-fail'}
-    ])
-  )
+test('normalizes every documented failing check state', () => {
+  for (const state of [
+    'FAILURE',
+    'ERROR',
+    'CANCELLED',
+    'TIMED_OUT',
+    'ACTION_REQUIRED',
+    'STARTUP_FAILURE',
+    'STALE'
+  ]) {
+    assert.equal(normalizeCheckStatus(statusContext(state, state)), 'FAILURE')
+    assert.equal(normalizeCheckStatus(checkRun(state, state)), 'FAILURE')
+  }
+})
 
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'required'},
-    {core: recording.core}
+test('normalizes missing, unrecognized, and inconsistent states to unknown', () => {
+  assert.equal(normalizeCheckStatus(statusContext('missing', null)), 'UNKNOWN')
+  assert.equal(normalizeCheckStatus(statusContext('new', 'NEW_STATE')), 'UNKNOWN')
+  assert.equal(normalizeCheckStatus(statusContext('lower', 'success')), 'UNKNOWN')
+  assert.equal(
+    normalizeCheckStatus(checkRun('missing-conclusion', null, 'COMPLETED')),
+    'UNKNOWN'
   )
-
-  assert.equal(result.commit_status, 'FAILURE')
-  assert.ok(
-    includesMessage(recording.info, "Required check 'required-pass': SUCCESS")
+  assert.equal(
+    normalizeCheckStatus(checkRun('early-conclusion', 'SUCCESS', 'IN_PROGRESS')),
+    'UNKNOWN'
   )
-  assert.ok(
-    includesMessage(
-      recording.info,
-      "Required check 'required-fail': FAILURE (FAILING)"
-    )
+  assert.equal(
+    normalizeCheckStatus(checkRun('pending-conclusion', 'PENDING', 'COMPLETED')),
+    'UNKNOWN'
   )
-  assert.ok(
-    includesMessage(recording.info, 'Overall required checks status: FAILURE')
+  assert.equal(
+    normalizeCheckStatus(checkRun('success-status', null, 'SUCCESS')),
+    'UNKNOWN'
+  )
+  assert.equal(
+    normalizeCheckStatus(checkRun('failure-status', null, 'FAILURE')),
+    'UNKNOWN'
   )
 })
 
-test('reports successful required checks', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult([
-      {isRequired: true, conclusion: 'SUCCESS', name: 'required-pass'},
-      {isRequired: false, conclusion: 'FAILURE', name: 'optional-fail'}
-    ])
+test('aggregates checks using failure, unknown, pending, success precedence', () => {
+  assert.equal(aggregateCheckStatuses([]), 'UNKNOWN')
+  assert.equal(aggregateCheckStatuses(['SUCCESS']), 'SUCCESS')
+  assert.equal(aggregateCheckStatuses(['SUCCESS', 'PENDING']), 'PENDING')
+  assert.equal(
+    aggregateCheckStatuses(['SUCCESS', 'PENDING', 'UNKNOWN']),
+    'UNKNOWN'
   )
-
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'required'},
-    {core: recording.core}
-  )
-
-  assert.equal(result.commit_status, 'SUCCESS')
-  assert.ok(
-    includesMessage(recording.info, 'Overall required checks status: SUCCESS')
+  assert.equal(
+    aggregateCheckStatuses(['SUCCESS', 'PENDING', 'UNKNOWN', 'FAILURE']),
+    'FAILURE'
   )
 })
 
-test('uses exact exclusions and automatically excludes the workflow check', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult([
-      {isRequired: true, conclusion: 'FAILURE', name: 'test'},
-      {isRequired: true, conclusion: 'SUCCESS', name: 'test foo'},
-      {isRequired: true, conclusion: 'SUCCESS', name: 'test bar'},
-      {isRequired: true, conclusion: 'FAILURE', name: 'ci-workflow'}
-    ])
+test('counts unique current approved humans and excludes bots', () => {
+  assert.equal(
+    countUniqueApprovals([
+      review('alice'),
+      review('alice'),
+      review('bob', 'CHANGES_REQUESTED'),
+      review('dependabot', 'APPROVED', 'Bot'),
+      review('', 'APPROVED', 'User'),
+      {state: 'APPROVED', author: null},
+      review('carol', 'APPROVED', 'Mannequin')
+    ]),
+    2
   )
-
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'all', excludeChecks: ['test'], workflow: 'ci-workflow'},
-    {core: recording.core}
-  )
-
-  assert.equal(result.commit_status, 'SUCCESS')
-  assert.ok(includesMessage(recording.info, 'Excluding check from status evaluation: test'))
-  assert.ok(
-    includesMessage(
-      recording.info,
-      'Excluding check from status evaluation: ci-workflow'
-    )
-  )
-  assert.ok(includesMessage(recording.info, 'Evaluating 2 total checks'))
 })
 
-test('returns null when every check is excluded in all-checks mode', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult([{isRequired: true, conclusion: 'SUCCESS', name: 'build'}])
-  )
+test('selects required or all checks with exact configured and workflow exclusions', () => {
+  const checks = [
+    checkRun('build', 'FAILURE', 'COMPLETED', true),
+    checkRun('Build', 'SUCCESS', 'COMPLETED', true),
+    checkRun('workflow / job', 'FAILURE', 'COMPLETED', true),
+    statusContext('optional', 'PENDING', false)
+  ]
 
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'all', excludeChecks: ['build']},
-    {core: recording.core}
+  assert.equal(
+    determineCommitStatus(checks, 'required', [' build ', '', 'build'], 'workflow / job'),
+    'SUCCESS'
   )
-
-  assert.equal(result.commit_status, null)
-  assert.ok(includesMessage(recording.info, 'No CI checks found after filtering'))
+  assert.equal(
+    determineCommitStatus(checks, 'all', ['build'], 'workflow / job'),
+    'PENDING'
+  )
+  assert.equal(
+    determineCommitStatus(
+      [statusContext('optional-only', 'SUCCESS', false)],
+      'required',
+      [],
+      undefined
+    ),
+    'UNKNOWN'
+  )
+  assert.equal(determineCommitStatus([], 'all', [], undefined), 'UNKNOWN')
+  assert.equal(determineCommitStatus([], 'all', [], '   '), 'UNKNOWN')
 })
 
-test('returns success when no required checks remain after filtering', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult([{isRequired: true, conclusion: 'SUCCESS', name: 'build'}])
-  )
-
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'required', excludeChecks: ['build']},
-    {core: recording.core}
-  )
-
-  assert.equal(result.commit_status, 'SUCCESS')
-  assert.ok(includesMessage(recording.info, 'No required checks found after filtering'))
-})
-
-test('returns null when GitHub reports no check suites and applies metadata defaults', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult([], {
+test('fetches validated status data and computes four-state outputs', async () => {
+  const core = createRecordingCore()
+  const client = recordingClient(
+    pullRequest({
       reviewDecision: null,
-      totalApprovals: 0,
-      mergeStateStatus: null,
-      mergeable: null,
-      isDraft: null,
-      checkSuiteCount: 0,
-      rollupState: null
+      mergeStateStatus: 'BLOCKED',
+      mergeable: 'CONFLICTING',
+      isDraft: true,
+      checks: [
+        checkRun('build', 'SUCCESS'),
+        statusContext('current workflow', 'FAILURE')
+      ],
+      latestReviews: [review('alice'), review('alice'), review('robot', 'APPROVED', 'Bot')]
     })
   )
 
   const result = await status(
-    graphql.client,
-    {repo: context.repo},
-    42,
-    {checks: 'all'},
-    {core: recording.core}
+    client.client,
+    {repo: {owner: 'octocat', repo: 'example'}},
+    '42',
+    {
+      checks: 'all',
+      excludeChecks: [' docs ', 'docs'],
+      workflow: ' current workflow '
+    },
+    {core: core.core}
   )
 
+  assert.deepEqual(client.requests, [
+    {owner: 'octocat', repo: 'example', number: 42}
+  ])
   assert.deepEqual(result, {
     review_decision: null,
-    total_approvals: null,
-    merge_state_status: null,
-    mergeable_state: null,
-    is_draft: false,
-    commit_status: null
-  })
-  assert.ok(includesMessage(recording.info, 'No CI checks have been defined'))
-  assert.ok(includesMessage(recording.info, 'pr-status'))
-})
-
-test('returns null when a check suite contains no contexts', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(createResult([], {checkSuiteCount: 1}))
-
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'all'},
-    {core: recording.core}
-  )
-
-  assert.equal(result.commit_status, null)
-  assert.ok(includesMessage(recording.info, 'No CI checks found on this pull request'))
-})
-
-test('includes unknown check names and logs unknown check fields', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult(
-      [
-        {
-          isRequired: true,
-          conclusion: null,
-          status: null,
-          state: null,
-          ignored: null,
-          available: 'value'
-        }
-      ],
-      {rollupState: 'SUCCESS'}
-    )
-  )
-
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'all', excludeChecks: ['not-this-check']},
-    {core: recording.core}
-  )
-
-  assert.equal(result.commit_status, 'SUCCESS')
-  assert.ok(includesMessage(recording.debug, 'Check status is UNKNOWN'))
-  assert.ok(includesMessage(recording.debug, 'Available fields:'))
-  assert.ok(
-    includesMessage(recording.debug, 'unknown name found, including in evaluation')
-  )
-})
-
-test('uses FAILURE in the status log when a failing rollup has no state', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql(
-    createResult(
-      [{isRequired: true, conclusion: 'FAILURE', name: 'build'}],
-      {rollupState: null}
-    )
-  )
-
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'all'},
-    {core: recording.core}
-  )
-
-  assert.equal(result.commit_status, null)
-  assert.ok(includesMessage(recording.info, 'Overall CI status: FAILURE'))
-})
-
-test('degrades malformed commit-status data to null and logs the response', async () => {
-  const recording = createRecordingCore()
-  const graphql = createGraphql({
-    repository: {
-      pullRequest: {
-        reviewDecision: 'APPROVED',
-        mergeStateStatus: 'CLEAN',
-        mergeable: 'MERGEABLE',
-        isDraft: true,
-        reviews: {totalCount: 3}
-      }
-    }
-  })
-
-  const result = await status(
-    graphql.client,
-    context,
-    42,
-    {checks: 'all'},
-    {core: recording.core}
-  )
-
-  assert.deepEqual(result, {
-    review_decision: 'APPROVED',
-    total_approvals: 3,
-    merge_state_status: 'CLEAN',
-    mergeable_state: 'MERGEABLE',
+    total_approvals: 1,
+    merge_state_status: 'BLOCKED',
+    mergeable_state: 'CONFLICTING',
     is_draft: true,
-    commit_status: null
+    commit_status: 'SUCCESS'
   })
-  assert.ok(includesMessage(recording.warning, 'Could not retrieve PR commit status'))
-  assert.ok(includesMessage(recording.debug, 'Raw GraphQL result'))
+  assert.ok(includesMessage(core.info, 'Fetching pull request status'))
+  assert.ok(includesMessage(core.info, 'docs, current workflow'))
+  assert.ok(includesMessage(core.info, 'Commit Status: SUCCESS'))
+  assert.ok(includesMessage(core.debug, '"total_approvals":1'))
 })
 
-test('handles a circular malformed response without trying to serialize it', async () => {
-  const recording = createRecordingCore()
-  const circular: Record<string, unknown> = {}
-  circular.repository = circular
-  const graphql = createGraphql(circular)
+test('omits an empty workflow from exclusion logging', async () => {
+  const core = createRecordingCore()
+  const client = recordingClient(pullRequest({checks: []}))
 
   const result = await status(
-    graphql.client,
-    context,
+    client.client,
+    {repo: {owner: 'octocat', repo: 'example'}},
     42,
-    {checks: 'all'},
-    {core: recording.core}
+    {checks: 'required', workflow: '   '},
+    {core: core.core}
   )
 
-  assert.equal(result.commit_status, null)
-  assert.ok(includesMessage(recording.debug, 'Could not output raw GraphQL result'))
+  assert.equal(result.commit_status, 'UNKNOWN')
+  assert.ok(includesMessage(core.info, 'evaluation: '))
 })
 
-test('logs and rethrows GraphQL Error failures', async () => {
-  const recording = createRecordingCore()
-  const expected = new Error('GraphQL query failed')
+test('rejects invalid configuration before making an API request', async () => {
+  const core = createRecordingCore()
+  const client = recordingClient(pullRequest())
 
   await assert.rejects(
     status(
-      createRejectingGraphql(expected),
-      context,
+      client.client,
+      {repo: {owner: 'octocat', repo: 'example'}},
+      0,
+      {checks: 'all'},
+      {core: core.core}
+    ),
+    /pr_number/
+  )
+  await assert.rejects(
+    status(
+      client.client,
+      {repo: {owner: 'octocat', repo: 'example'}},
+      42,
+      {checks: 'optional'},
+      {core: core.core}
+    ),
+    /checks must be exactly/
+  )
+  assert.deepEqual(client.requests, [])
+})
+
+test('propagates client failures', async () => {
+  const expected = new Error('request failed')
+  const client: PullRequestStatusClient = {
+    async getPullRequestStatus() {
+      throw expected
+    }
+  }
+
+  await assert.rejects(
+    status(
+      client,
+      {repo: {owner: 'octocat', repo: 'example'}},
       42,
       {checks: 'all'},
-      {core: recording.core}
+      {core: createRecordingCore().core}
     ),
     expected
   )
-  assert.ok(includesMessage(recording.error, 'Failed to fetch PR status'))
-  assert.ok(includesMessage(recording.debug, 'Error details:'))
 })

@@ -52,7 +52,7 @@ jobs:
           fi
 
           case "${ACTUAL_COMMIT_STATUS}" in
-            SUCCESS|FAILURE|PENDING|'') ;;
+            SUCCESS|FAILURE|PENDING|UNKNOWN) ;;
             *)
               echo "Unexpected commit_status: ${ACTUAL_COMMIT_STATUS}"
               exit 1

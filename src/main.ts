@@ -1,81 +1,88 @@
-import * as core from '@actions/core'
-import * as github from '@actions/github'
-import {retry as octokitRetry} from '@octokit/plugin-retry'
-
-import {COLORS} from './functions/colors.ts'
-import {label as updateLabels} from './functions/label.ts'
-import {outputs as setOutputs} from './functions/outputs.ts'
-import {status as getStatus} from './functions/status.ts'
+import actions from './actions.ts'
+import type {ActionsApi} from './actions.ts'
+import {loadActionContext} from './context.ts'
+import type {ActionContext} from './context.ts'
+import {
+  determineLabelActions as selectLabelActions,
+  label as reconcileLabels
+} from './functions/label.ts'
+import {outputs as writeOutputs} from './functions/outputs.ts'
+import {parseEvaluationCriteria} from './functions/outputs.ts'
+import type {CheckSelection} from './functions/constants.ts'
+import {
+  parseCheckSelection,
+  parsePullRequestNumber,
+  status as getStatus
+} from './functions/status.ts'
+import type {StatusResult} from './functions/status.ts'
 import {stringToArray as parseStringToArray} from './functions/string-to-array.ts'
-import type {
-  ActionContext,
-  ActionData,
-  ActionInputs,
-  CoreApi,
-  OctokitClient
-} from './types.ts'
-import {VERSION} from './version.ts'
+import {createGitHubClient} from './github.ts'
+import type {GitHubClient} from './github.ts'
+
+export interface ActionInputs {
+  token: string
+  workflow: string
+  checks: CheckSelection
+  evaluations: string[]
+  passLabels: string[]
+  passLabelsCleanup: string[]
+  failLabels: string[]
+  excludeChecks: string[]
+  prNumber: number
+}
 
 export interface MainDependencies {
-  core: CoreApi
-  context: ActionContext
-  createOctokitClient(token: string): OctokitClient
+  core: ActionsApi
+  loadContext(): ActionContext
+  createClient(token: string): GitHubClient
   status: typeof getStatus
-  outputs: typeof setOutputs
+  outputs: typeof writeOutputs
   stringToArray: typeof parseStringToArray
-  label: typeof updateLabels
+  determineLabelActions: typeof selectLabelActions
+  label: typeof reconcileLabels
 }
 
-interface LabelActions {
-  labelsToAdd: string[]
-  labelsToRemove: string[]
+export type RunResult = 'success' | 'failure'
+
+export const defaultDependencies: MainDependencies = {
+  core: actions,
+  loadContext: loadActionContext,
+  createClient: createGitHubClient,
+  status: getStatus,
+  outputs: writeOutputs,
+  stringToArray: parseStringToArray,
+  determineLabelActions: selectLabelActions,
+  label: reconcileLabels
 }
 
-/**
- * Parse and validate input parameters from GitHub Actions.
- */
 export function parseInputs(
-  dependencies: Pick<
-    MainDependencies,
-    'core' | 'context' | 'stringToArray'
-  >
+  dependencies: Pick<MainDependencies, 'core' | 'stringToArray'>,
+  context: ActionContext
 ): ActionInputs {
-  const {core: coreApi, context, stringToArray} = dependencies
-  const coreDependencies = {core: coreApi}
-  const token = coreApi.getInput('github_token', {required: true})
-  const workflow =
-    coreApi.getInput('workflow', {required: false}) || context.workflow
-  const checks = coreApi.getInput('checks', {required: true})
-  const evaluations = stringToArray(
-    coreApi.getInput('evaluations', {required: true}),
-    coreDependencies
+  const {core, stringToArray} = dependencies
+  const token = core.getInput('github_token', {required: true})
+  const workflow = core.getInput('workflow') || context.workflow
+  const checks = parseCheckSelection(
+    core.getInput('checks', {required: true})
   )
-  const passLabels = stringToArray(
-    coreApi.getInput('pass_labels', {required: false}),
-    coreDependencies
-  )
+  const evaluations = stringToArray(core.getInput('evaluations'))
+  const passLabels = stringToArray(core.getInput('pass_labels'))
   const passLabelsCleanup = stringToArray(
-    coreApi.getInput('pass_labels_cleanup', {required: false}),
-    coreDependencies
+    core.getInput('pass_labels_cleanup')
   )
-  const failLabels = stringToArray(
-    coreApi.getInput('fail_labels', {required: false}),
-    coreDependencies
+  const failLabels = stringToArray(core.getInput('fail_labels'))
+  const excludeChecks = stringToArray(core.getInput('exclude_checks'))
+  const inputPullRequestNumber = core.getInput('pr_number')
+  const prNumber = parsePullRequestNumber(
+    inputPullRequestNumber === ''
+      ? context.issueNumber
+      : inputPullRequestNumber
   )
-  const excludeChecks = stringToArray(
-    coreApi.getInput('exclude_checks', {required: false}),
-    coreDependencies
-  )
-  const prNumber =
-    coreApi.getInput('pr_number', {required: false}) ||
-    context.issue?.number ||
-    context.payload?.pull_request?.number
 
-  if (!prNumber) {
-    throw new Error('❌ Pull request number not found in context or inputs')
-  }
+  parseEvaluationCriteria(evaluations)
+  core.debug('📋 Parsed and validated inputs successfully')
 
-  const inputs: ActionInputs = {
+  return {
     token,
     workflow,
     checks,
@@ -86,146 +93,100 @@ export function parseInputs(
     excludeChecks,
     prNumber
   }
-
-  coreApi.debug('📋 Parsed inputs successfully')
-  return inputs
 }
 
-/**
- * Create and configure the Octokit client.
- */
-export function createOctokitClient(token: string): OctokitClient {
-  const octokit = github.getOctokit(token, {
-    userAgent: `grantbirki/pr-status@${VERSION}`,
-    additionalPlugins: [octokitRetry]
-  })
-
-  // Octokit accepts string path parameters at runtime, while its declarations
-  // require numbers. The action intentionally preserves its existing string
-  // input flow through the narrower local interface.
-  return octokit as unknown as OctokitClient
-}
-
-/**
- * Log the label actions that will be performed.
- */
 export function logLabelActions(
-  labelsToAdd: string[],
-  labelsToRemove: string[],
-  coreApi: CoreApi
+  labelsToAdd: readonly string[],
+  labelsToRemove: readonly string[],
+  core: Pick<ActionsApi, 'info'>
 ): void {
   if (labelsToAdd.length > 0) {
-    coreApi.info(`🏷️ Labels to add: ${labelsToAdd.join(', ')}`)
+    core.info(`🏷️ Labels to add: ${labelsToAdd.join(', ')}`)
   }
-
   if (labelsToRemove.length > 0) {
-    coreApi.info(`🏷️ Labels to remove: ${labelsToRemove.join(', ')}`)
+    core.info(`🏷️ Labels to remove: ${labelsToRemove.join(', ')}`)
   }
-
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
-    coreApi.info('🏷️ No label changes needed')
+    core.info('🏷️ No label changes needed')
   }
 }
 
-/**
- * Determine labels to add and remove based on the evaluation result.
- */
-export function determineLabelActions(
-  pass: boolean,
-  passLabels: string[],
-  failLabels: string[],
-  passLabelsCleanup: string[]
-): LabelActions {
-  if (pass) {
-    return {
-      labelsToAdd: passLabels,
-      labelsToRemove: failLabels.concat(passLabelsCleanup)
-    }
+export function safeErrorMessage(error: unknown, token?: string): string {
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Unknown error'
+  const withoutAuthorization = rawMessage.replace(
+    /\bBearer\s+[^\s,;]+/gi,
+    'Bearer [REDACTED]'
+  )
+
+  if (token === undefined || token === '') {
+    return withoutAuthorization
   }
 
-  return {
-    labelsToAdd: failLabels,
-    labelsToRemove: passLabels
-  }
+  return withoutAuthorization.split(token).join('[REDACTED]')
 }
 
-export const defaultDependencies: MainDependencies = {
-  core,
-  context: github.context,
-  createOctokitClient,
-  status: getStatus,
-  outputs: setOutputs,
-  stringToArray: parseStringToArray,
-  label: updateLabels
-}
-
-/**
- * Main function that orchestrates the PR status workflow.
- */
 export async function run(
   dependencies: MainDependencies = defaultDependencies
-): Promise<'success'> {
-  const {core: coreApi, context} = dependencies
+): Promise<RunResult> {
+  const {core} = dependencies
+  let token: string | undefined
 
   try {
-    coreApi.info(
-      `🚀 ${COLORS.highlight}PR Status Action starting${COLORS.reset}`
-    )
+    core.info('🚀 PR Status Action starting')
+    const context = dependencies.loadContext()
+    const inputs = parseInputs(dependencies, context)
+    token = inputs.token
+    core.info(`🔍 Evaluating PR #${inputs.prNumber}`)
 
-    const inputs = parseInputs(dependencies)
-    coreApi.info(`🔍 Evaluating PR #${inputs.prNumber}`)
-
-    const octokit = dependencies.createOctokitClient(inputs.token)
-    const data: ActionData = {
-      checks: inputs.checks,
-      prNumber: inputs.prNumber,
-      evaluations: inputs.evaluations,
-      excludeChecks: inputs.excludeChecks,
-      workflow: inputs.workflow
-    }
-
-    coreApi.info(
-      `🏃 Running status checks on pull request ${COLORS.highlight}${inputs.prNumber}${COLORS.reset}`
-    )
-    const statusResult = await dependencies.status(
-      octokit,
+    const client = dependencies.createClient(inputs.token)
+    const statusResult: StatusResult = await dependencies.status(
+      client,
       context,
       inputs.prNumber,
-      data,
-      {core: coreApi}
+      {
+        checks: inputs.checks,
+        excludeChecks: inputs.excludeChecks,
+        workflow: inputs.workflow
+      },
+      {core}
     )
 
-    const pass = dependencies.outputs(statusResult, data, {core: coreApi})
-    coreApi.info(`📊 Evaluation result: ${pass ? 'PASS ✅' : 'FAIL ❌'}`)
+    const passed = dependencies.outputs(
+      statusResult,
+      {evaluations: inputs.evaluations},
+      {core}
+    )
+    core.info(`📊 Evaluation result: ${passed ? 'PASS ✅' : 'FAIL ❌'}`)
 
-    const {labelsToAdd, labelsToRemove} = determineLabelActions(
-      pass,
+    const labelActions = dependencies.determineLabelActions(
+      passed,
       inputs.passLabels,
       inputs.failLabels,
       inputs.passLabelsCleanup
     )
-
-    logLabelActions(labelsToAdd, labelsToRemove, coreApi)
+    logLabelActions(
+      labelActions.labelsToAdd,
+      labelActions.labelsToRemove,
+      core
+    )
     await dependencies.label(
       inputs.prNumber,
       context,
-      octokit,
-      labelsToAdd,
-      labelsToRemove,
-      {core: coreApi}
+      client,
+      labelActions.labelsToAdd,
+      labelActions.labelsToRemove,
+      {core}
     )
 
-    coreApi.info(
-      `✅ ${COLORS.success}PR Status Action completed successfully${COLORS.reset}`
-    )
+    core.info('✅ PR Status Action completed successfully')
     return 'success'
   } catch (error: unknown) {
-    const actionError = error as Error
-    coreApi.error(
-      `❌ ${COLORS.error}PR Status Action failed: ${actionError.message}${COLORS.reset}`
-    )
-    coreApi.debug(`🔍 Error details: ${actionError.stack}`)
-    coreApi.setFailed(actionError.message)
-    throw error
+    core.setFailed(`PR Status Action failed: ${safeErrorMessage(error, token)}`)
+    return 'failure'
   }
 }

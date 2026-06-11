@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
+import {spawnSync} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import {mkdtemp, readFile, rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import test from 'node:test'
+import {fileURLToPath} from 'node:url'
 
 import {
   COVERAGE_BADGE,
@@ -64,11 +66,7 @@ test('toolchain and dependency budget stay exact', async () => {
     node: '24.16.0',
     npm: '11.13.0'
   })
-  assert.deepEqual(packageJson.dependencies, {
-    '@actions/core': '1.11.1',
-    '@actions/github': '6.0.1',
-    '@octokit/plugin-retry': '6.1.0'
-  })
+  assert.deepEqual(packageJson.dependencies, {})
   assert.deepEqual(packageJson.devDependencies, {
     '@types/node': '24.12.2',
     '@vercel/ncc': '0.38.4',
@@ -96,6 +94,14 @@ test('lockfile uses public package URLs and no lifecycle scripts', async () => {
       assert.match(metadata.resolved, /^https:\/\/registry\.npmjs\.org\//)
     }
   }
+
+  assert.deepEqual(Object.keys(packageLock.packages).sort(), [
+    '',
+    'node_modules/@types/node',
+    'node_modules/@vercel/ncc',
+    'node_modules/typescript',
+    'node_modules/undici-types'
+  ])
 })
 
 test('strict TypeScript checking includes source, tests, and helpers', async () => {
@@ -117,15 +123,24 @@ test('strict TypeScript checking includes source, tests, and helpers', async () 
 
 test('bundled public artifacts contain no local paths or unrelated sources', async () => {
   const bundle = await readFile(new URL('dist/index.js', repositoryRoot), 'utf8')
+  const licenses = await readFile(
+    new URL('dist/licenses.txt', repositoryRoot),
+    'utf8'
+  )
   const sourceMap = JSON.parse(
     await readFile(new URL('dist/index.js.map', repositoryRoot), 'utf8')
   ) as {sources: string[]; sourcesContent?: Array<string | null>}
 
   assert.doesNotMatch(bundle, /\/Users\/|\/home\/runner\//)
+  assert.doesNotMatch(bundle, /@actions\/|@octokit\/|undici/u)
+  assert.equal(licenses, '')
   assert.ok(sourceMap.sources.includes('.././src/index.ts'))
   assert.ok(sourceMap.sources.includes('.././src/main.ts'))
+  assert.ok(sourceMap.sources.includes('.././src/actions.ts'))
+  assert.ok(sourceMap.sources.includes('.././src/github.ts'))
   for (const source of sourceMap.sources) {
     assert.doesNotMatch(source, /^(?:\/|[A-Za-z]:\\)/)
+    assert.doesNotMatch(source, /node_modules/)
     assert.doesNotMatch(source, /(?:__tests?__|\/test\/|\/tests\/)/)
     assert.doesNotMatch(source, /scripts\/coverage-badge/)
   }
@@ -135,4 +150,21 @@ test('bundled public artifacts contain no local paths or unrelated sources', asy
       assert.doesNotMatch(sourceContent, /\/Users\/|\/home\/runner\//)
     }
   }
+})
+
+test('bundled executable rejects unsupported non-Actions execution', () => {
+  const environment = {...process.env}
+  delete environment.GITHUB_ACTIONS
+  delete environment.GITHUB_OUTPUT
+
+  const result = spawnSync(process.execPath, ['dist/index.js'], {
+    cwd: fileURLToPath(repositoryRoot),
+    encoding: 'utf8',
+    env: environment
+  })
+
+  assert.equal(result.error, undefined)
+  assert.equal(result.status, 1)
+  assert.match(result.stdout, /only run inside GitHub Actions/)
+  assert.equal(result.stderr, '')
 })
