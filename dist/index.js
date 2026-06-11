@@ -580,7 +580,7 @@ const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.ur
 // - v10.123.44
 // - v1.1.1-rc.1
 // - etc
-const VERSION = 'v2.0.0';
+const VERSION = 'v3.0.0';
 
 ;// CONCATENATED MODULE: ./src/github.ts
 

@@ -213,7 +213,7 @@ test('uses GitHub.com endpoints, protocol headers, a versioned user agent, and t
   assert.equal(headers.get('accept'), 'application/vnd.github+json')
   assert.equal(headers.get('x-github-api-version'), '2022-11-28')
   assert.equal(headers.get('content-type'), 'application/json')
-  assert.equal(headers.get('user-agent'), 'grantbirki/pr-status@v2.0.0')
+  assert.equal(headers.get('user-agent'), 'grantbirki/pr-status@v3.0.0')
 
   const body = JSON.parse(String(call.init.body)) as {
     query: string
