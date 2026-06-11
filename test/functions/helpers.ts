@@ -1,7 +1,7 @@
-import type {CoreApi} from '../../src/types.ts'
+import type {ActionsApi} from '../../src/actions.ts'
 
 export interface RecordingCore {
-  core: CoreApi
+  core: ActionsApi
   debug: string[]
   info: string[]
   warning: string[]
@@ -18,7 +18,7 @@ export function createRecordingCore(): RecordingCore {
   const failed: Array<string | Error> = []
   const outputs = new Map<string, unknown>()
 
-  const core: CoreApi = {
+  const core: ActionsApi = {
     getInput(name: string): string {
       throw new Error(`Unexpected input request: ${name}`)
     },
@@ -28,11 +28,11 @@ export function createRecordingCore(): RecordingCore {
     info(message: string): void {
       info.push(message)
     },
-    warning(message: string): void {
-      warning.push(message)
+    warning(message: string | Error): void {
+      warning.push(message instanceof Error ? message.message : message)
     },
-    error(message: string): void {
-      error.push(message)
+    error(message: string | Error): void {
+      error.push(message instanceof Error ? message.message : message)
     },
     setOutput(name: string, value: unknown): void {
       outputs.set(name, value)

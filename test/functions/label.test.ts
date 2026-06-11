@@ -1,57 +1,57 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {label} from '../../src/functions/label.ts'
-import type {
-  ActionContext,
-  LabelClient,
-  LabelRequest
-} from '../../src/types.ts'
+import {
+  determineLabelActions,
+  label
+} from '../../src/functions/label.ts'
+import type {LabelClient} from '../../src/functions/label.ts'
 import {createRecordingCore, includesMessage} from './helpers.ts'
 
-interface LabelClientRecording {
+interface LabelRecording {
   client: LabelClient
-  listed: LabelRequest[]
-  removed: Array<LabelRequest & {name: string}>
-  added: Array<LabelRequest & {labels: string[]}>
+  listed: Array<{owner: string; repo: string; number: number}>
+  removed: Array<{owner: string; repo: string; number: number; name: string}>
+  added: Array<{
+    owner: string
+    repo: string
+    number: number
+    labels: string[]
+  }>
 }
 
-interface LabelFailures {
-  list?: unknown
-  remove?: unknown
-  add?: unknown
+interface Failures {
+  list?: Error
+  remove?: Error
+  add?: Error
 }
 
-function createLabelClient(
+function recordingClient(
   currentLabels: string[],
-  failures: LabelFailures = {}
-): LabelClientRecording {
-  const listed: LabelRequest[] = []
-  const removed: Array<LabelRequest & {name: string}> = []
-  const added: Array<LabelRequest & {labels: string[]}> = []
+  failures: Failures = {}
+): LabelRecording {
+  const listed: LabelRecording['listed'] = []
+  const removed: LabelRecording['removed'] = []
+  const added: LabelRecording['added'] = []
 
   const client: LabelClient = {
-    rest: {
-      issues: {
-        async listLabelsOnIssue(request) {
-          listed.push(request)
-          if ('list' in failures) {
-            throw failures.list
-          }
-          return {data: currentLabels.map(name => ({name}))}
-        },
-        async removeLabel(request) {
-          removed.push(request)
-          if ('remove' in failures) {
-            throw failures.remove
-          }
-        },
-        async addLabels(request) {
-          added.push(request)
-          if ('add' in failures) {
-            throw failures.add
-          }
-        }
+    async listIssueLabels(request) {
+      listed.push(request)
+      if (failures.list !== undefined) {
+        throw failures.list
+      }
+      return currentLabels
+    },
+    async removeLabel(request) {
+      removed.push(request)
+      if (failures.remove !== undefined) {
+        throw failures.remove
+      }
+    },
+    async addLabels(request) {
+      added.push(request)
+      if (failures.add !== undefined) {
+        throw failures.add
       }
     }
   }
@@ -59,168 +59,150 @@ function createLabelClient(
   return {client, listed, removed, added}
 }
 
-const context: ActionContext = {
-  repo: {owner: 'octocat', repo: 'example'}
-}
+const context = {repo: {owner: 'octocat', repo: 'example'}}
+const baseRequest = {owner: 'octocat', repo: 'example', number: 42}
 
-const baseRequest = {
-  owner: 'octocat',
-  repo: 'example',
-  issue_number: 42
-} as const
-
-test('returns immediately when no labels are requested', async () => {
-  const recording = createRecordingCore()
-  const octokit = createLabelClient([])
-
-  const result = await label(
-    42,
-    context,
-    octokit.client,
-    [],
-    [],
-    {core: recording.core}
+test('selects, trims, and de-duplicates PASS labels with addition winning overlap', () => {
+  assert.deepEqual(
+    determineLabelActions(
+      true,
+      [' ready ', 'ready', ''],
+      ['blocked', 'ready'],
+      [' waiting ', 'blocked']
+    ),
+    {
+      labelsToAdd: ['ready'],
+      labelsToRemove: ['blocked', 'waiting']
+    }
   )
-
-  assert.deepEqual(result, {added: [], removed: []})
-  assert.deepEqual(octokit.listed, [])
-  assert.deepEqual(octokit.added, [])
-  assert.ok(includesMessage(recording.info, 'No labels to add or remove'))
 })
 
-test('adds labels without listing labels when no removals are requested', async () => {
-  const recording = createRecordingCore()
-  const octokit = createLabelClient([])
+test('selects, trims, and de-duplicates FAIL labels with addition winning overlap', () => {
+  assert.deepEqual(
+    determineLabelActions(
+      false,
+      ['ready', ' blocked ', 'ready'],
+      [' blocked ', 'blocked'],
+      ['ignored']
+    ),
+    {
+      labelsToAdd: ['blocked'],
+      labelsToRemove: ['ready']
+    }
+  )
+})
+
+test('returns without client calls when no labels are requested', async () => {
+  const core = createRecordingCore()
+  const client = recordingClient([])
+
+  assert.deepEqual(
+    await label(42, context, client.client, [' ', ''], [], {core: core.core}),
+    {added: [], removed: []}
+  )
+  assert.deepEqual(client.listed, [])
+  assert.deepEqual(client.added, [])
+  assert.ok(includesMessage(core.info, 'No labels to add or remove'))
+})
+
+test('adds normalized labels without listing when no removals are requested', async () => {
+  const core = createRecordingCore()
+  const client = recordingClient([])
 
   const result = await label(
     42,
     context,
-    octokit.client,
-    ['ready', 'reviewed'],
+    client.client,
+    [' ready ', 'ready', 'reviewed'],
     [],
-    {core: recording.core}
+    {core: core.core}
   )
 
   assert.deepEqual(result, {added: ['ready', 'reviewed'], removed: []})
-  assert.deepEqual(octokit.listed, [])
-  assert.deepEqual(octokit.added, [
+  assert.deepEqual(client.listed, [])
+  assert.deepEqual(client.added, [
     {...baseRequest, labels: ['ready', 'reviewed']}
   ])
-  assert.ok(includesMessage(recording.info, 'Labels added: ready, reviewed'))
+  assert.ok(includesMessage(core.info, 'Labels added: ready, reviewed'))
 })
 
-test('preserves string pull request numbers in label requests', async () => {
-  const recording = createRecordingCore()
-  const octokit = createLabelClient([])
-
-  await label(
-    '0042',
-    context,
-    octokit.client,
-    ['ready'],
-    [],
-    {core: recording.core}
-  )
-
-  assert.deepEqual(octokit.added, [
-    {...baseRequest, issue_number: '0042', labels: ['ready']}
-  ])
-})
-
-test('removes only existing requested labels before adding labels', async () => {
-  const recording = createRecordingCore()
-  const octokit = createLabelClient(['remove-me', 'keep-me'])
+test('lists labels, skips absent removals, removes in order, then bulk-adds', async () => {
+  const core = createRecordingCore()
+  const client = recordingClient(['remove-one', 'remove-two'])
 
   const result = await label(
     42,
     context,
-    octokit.client,
-    ['add-me'],
-    ['missing', 'remove-me'],
-    {core: recording.core}
+    client.client,
+    [' add ', 'remove-two'],
+    ['missing', ' remove-one ', 'remove-one', 'remove-two'],
+    {core: core.core}
   )
 
-  assert.deepEqual(result, {added: ['add-me'], removed: ['remove-me']})
-  assert.deepEqual(octokit.listed, [baseRequest])
-  assert.deepEqual(octokit.removed, [
-    {...baseRequest, name: 'remove-me'}
+  assert.deepEqual(result, {added: ['add', 'remove-two'], removed: ['remove-one']})
+  assert.deepEqual(client.listed, [baseRequest])
+  assert.deepEqual(client.removed, [{...baseRequest, name: 'remove-one'}])
+  assert.deepEqual(client.added, [
+    {...baseRequest, labels: ['add', 'remove-two']}
   ])
-  assert.deepEqual(octokit.added, [{...baseRequest, labels: ['add-me']}])
-  assert.ok(includesMessage(recording.info, "Label not found: 'missing'"))
-  assert.ok(includesMessage(recording.info, 'Label removed: remove-me'))
+  assert.ok(includesMessage(core.info, "Label not found: 'missing'"))
+  assert.ok(includesMessage(core.info, 'Label removed: remove-one'))
 })
 
-test('supports removal without adding labels', async () => {
-  const recording = createRecordingCore()
-  const octokit = createLabelClient(['one', 'two'])
+test('supports removal without additions', async () => {
+  const client = recordingClient(['one', 'two'])
 
   const result = await label(
     42,
     context,
-    octokit.client,
+    client.client,
     [],
     ['one', 'two'],
-    {core: recording.core}
+    {core: createRecordingCore().core}
   )
 
   assert.deepEqual(result, {added: [], removed: ['one', 'two']})
-  assert.deepEqual(octokit.removed, [
+  assert.deepEqual(client.removed, [
     {...baseRequest, name: 'one'},
     {...baseRequest, name: 'two'}
   ])
-  assert.deepEqual(octokit.added, [])
+  assert.deepEqual(client.added, [])
 })
 
-test('warns on label-list failures and still attempts additions', async () => {
-  const recording = createRecordingCore()
-  const octokit = createLabelClient([], {list: new Error('list failed')})
+test('propagates label-list failures without attempting additions', async () => {
+  const expected = new Error('list failed')
+  const client = recordingClient([], {list: expected})
 
-  const result = await label(
-    42,
-    context,
-    octokit.client,
-    ['add-me'],
-    ['remove-me'],
-    {core: recording.core}
+  await assert.rejects(
+    label(42, context, client.client, ['add'], ['remove'], {
+      core: createRecordingCore().core
+    }),
+    expected
   )
-
-  assert.deepEqual(result, {added: ['add-me'], removed: []})
-  assert.deepEqual(octokit.added, [{...baseRequest, labels: ['add-me']}])
-  assert.ok(includesMessage(recording.warning, 'list failed'))
+  assert.deepEqual(client.added, [])
 })
 
-test('warns on label-removal failures', async () => {
-  const recording = createRecordingCore()
-  const octokit = createLabelClient(['remove-me'], {
-    remove: new Error('remove failed')
-  })
+test('propagates label-removal failures without attempting additions', async () => {
+  const expected = new Error('remove failed')
+  const client = recordingClient(['remove'], {remove: expected})
 
-  const result = await label(
-    42,
-    context,
-    octokit.client,
-    [],
-    ['remove-me'],
-    {core: recording.core}
+  await assert.rejects(
+    label(42, context, client.client, ['add'], ['remove'], {
+      core: createRecordingCore().core
+    }),
+    expected
   )
-
-  assert.deepEqual(result, {added: [], removed: []})
-  assert.ok(includesMessage(recording.warning, 'remove failed'))
+  assert.deepEqual(client.added, [])
 })
 
-test('warns on label-addition failures', async () => {
-  const recording = createRecordingCore()
-  const octokit = createLabelClient([], {add: new Error('add failed')})
+test('propagates bulk-addition failures', async () => {
+  const expected = new Error('add failed')
+  const client = recordingClient([], {add: expected})
 
-  const result = await label(
-    42,
-    context,
-    octokit.client,
-    ['add-me'],
-    [],
-    {core: recording.core}
+  await assert.rejects(
+    label(42, context, client.client, ['add'], [], {
+      core: createRecordingCore().core
+    }),
+    expected
   )
-
-  assert.deepEqual(result, {added: [], removed: []})
-  assert.ok(includesMessage(recording.warning, 'add failed'))
 })

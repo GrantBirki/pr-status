@@ -5,54 +5,93 @@
 [![lint](https://github.com/GrantBirki/pr-status/actions/workflows/lint.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/lint.yml)
 [![coverage](./badges/coverage.svg)](./badges/coverage.svg)
 
-A GitHub Action that checks the status of a pull request.
+A dependency-free runtime GitHub Action that checks the status of a pull
+request on GitHub.com.
 
 ## About 💡
 
-Depending on the inputs provided, this Action will check the "status" of a pull request to determine if it has been fully approved, if it has passing CI, if it is mergeable, etc. It will then set outputs based on the status of the pull request and can apply or remove labels on the pull request based on the evaluation of the pull request.
+Depending on its inputs, this action determines whether a pull request is
+approved, has passing CI, is mergeable, and is not a draft. It always exposes
+normalized status outputs and can reconcile labels from the resulting
+`PASS`/`FAIL` evaluation.
+
+The action supports GitHub.com only. It rejects GitHub Enterprise Server API
+endpoints and does not claim support for self-hosted HTTP proxies.
 
 ## Inputs 📥
 
 | Input | Required? | Default | Description |
 | ----- | --------- | ------- | ----------- |
-| `github_token` | `true` | `${{ github.token }}` | The GitHub token used to create an authenticated client - Provided for you by default! |
-| `pr_number` | `true` | `${{ github.event.number }}` | The pull request number to check the status of |
+| `github_token` | `true` | `${{ github.token }}` | The GitHub.com token used to read pull request state and, when labels are configured, update labels |
+| `pr_number` | `true` | `${{ github.event.number }}` | A positive integer identifying the pull request to evaluate |
 | `workflow` | `false` | `${{ github.workflow }}` | The name of the workflow that is running this action. It is automatically excluded from CI status evaluation so the action does not wait on itself. |
-| `checks` | `true` | `all` | Whether to only look for `required` ci checks or `all` ci checks on the pull request |
-| `evaluations` | `false` | `approved` | The attributes (comma separated list) to evaluate the pull request against when determining its status on a PASS/FAIL system. The default is just `approved` so a PR only needs proper approvals for this check to pass. This plays into the `evaluation` output. Full example: `approved,ci_passing,mergeable,min_approvals=2` - This full example would state that a PR must be considered approved, have passing CI, have at least two approvals, and be in a cleanly mergeable state to have the `evaluation` output be set to `PASS`. |
+| `checks` | `true` | `all` | Exactly `all` or `required`, selecting which CI checks to evaluate |
+| `evaluations` | `false` | `approved` | A case-sensitive comma-separated list containing `approved`, `ci_passing`, `mergeable`, `not_draft`, or `min_approvals=N`. An explicitly empty value evaluates to `PASS`. |
 | `pass_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation passes - Examples: `"ready-for-deployment,approved"` |
-| `pass_labels_cleanup` | `false` | - | An optional list of labels too "clean up" (remove) if the pull request passes evaluation - Examples: `"ready-for-review,waiting"` |
+| `pass_labels_cleanup` | `false` | - | An optional list of labels to "clean up" (remove) if the pull request passes evaluation - Examples: `"ready-for-review,waiting"` |
 | `fail_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation fails - Examples: `"needs-help,ci-failing,needs-review"` |
-| `exclude_checks` | `false` | - | A comma separated list of check names to exclude from CI status evaluation - Examples: `"lint,some-other-check,foo"` |
+| `exclude_checks` | `false` | - | A case-sensitive comma-separated list of exact check names to exclude from CI status evaluation |
 
 > [!NOTE]  
 > If you use any of the `pass_labels`, `pass_labels_cleanup`, or `fail_labels` input options, you will need `pull-requests: write` permissions within your Actions workflow.
+
+Input configuration is validated before any API request. An invalid pull
+request number, check mode, evaluation name, or `min_approvals` value fails the
+action step instead of producing an evaluation result.
 
 ## Outputs 📤
 
 | Output | Description |
 | ------ | ----------- |
-| `approved` | The string "true" if the pull request is in a fully approved state, "false" otherwise |
-| `total_approvals` | The total number of approvals on the pull request |
-| `review_decision` | The decision of the pull request review status - Examples: `"APPROVED"`, `"CHANGES_REQUESTED"`, `"REVIEW_REQUIRED"`, `null`, etc |
+| `approved` | The string `"true"` when `reviewDecision` is `APPROVED` or null, and `"false"` otherwise |
+| `total_approvals` | The number of unique non-bot actors whose latest review is `APPROVED` |
+| `review_decision` | GitHub's review decision, such as `APPROVED`, `CHANGES_REQUESTED`, or `REVIEW_REQUIRED`; empty when GitHub returns null |
 | `merge_state_status` | The status of the pull request merge state - Examples: `"CLEAN"`, `"DIRTY"`, `"UNKNOWN"`, `"DRAFT"`, `"BLOCKED"`, etc |
 | `mergeable_state` | The mergeable state of the pull request - Examples: `"MERGEABLE"`, `"UNSTABLE"`, `"CONFLICTING"`, `"UNKNOWN"`, etc |
-| `commit_status` | The ci status for the latest commit on the pull request - Examples: `"SUCCESS"`, `"FAILURE"`, `"PENDING"`, `null`, etc |
+| `commit_status` | Exactly one normalized CI state: `SUCCESS`, `FAILURE`, `PENDING`, or `UNKNOWN` |
 | `is_draft` | The string "true" if the pull request is in draft status, "false" otherwise |
-| `evaluation` | The overall evaluation of the pull request based on the `evaluations` input - Examples: `"PASS"`, `"FAIL"` |
+| `evaluation` | `PASS` or `FAIL` after ANDing all requested evaluation criteria |
+
+A legitimate negative pull request state produces `evaluation=FAIL` while the
+action step still succeeds. Invalid input, API/protocol errors, malformed API
+responses, and requested label mutations that cannot be completed fail the
+action step. Status and evaluation outputs are written before label changes, so
+they remain available when label reconciliation fails.
 
 ## Evaluations 🧮
 
 The evaluations input allows you to specify which attributes to evaluate the pull request against. The following attributes are supported:
 
 - `approved`: Checks if the pull request is in a fully approved state
-- `ci_passing`: Checks if the latest commit on the pull request has passing CI checks
+- `ci_passing`: Passes only when the selected checks normalize to `SUCCESS`.
+  Having no selected CI evidence, including after exclusions, normalizes to
+  `UNKNOWN` and fails closed.
 - `mergeable`: Checks if the pull request is in a cleanly mergeable state
-- `min_approvals=N`: Checks if the pull request has at least N approvals (e.g., `min_approvals=2`)
+- `min_approvals=N`: Checks the unique latest non-bot approval count. `N` must
+  be `0` or a positive integer without signs, whitespace, or leading zeroes;
+  `min_approvals=0` always passes.
 - `not_draft`: Checks if the pull request is not in draft status
 
 > [!TIP]  
 > When using the `ci_passing` evaluation, this action will automatically exclude itself from the CI check evaluation to avoid circular dependencies. You can customize which checks to exclude using the `exclude_checks` input parameter.
+
+Evaluation names are case-sensitive and unknown or malformed criteria are
+configuration errors. A null GitHub `reviewDecision` continues to satisfy
+`approved`, which covers repositories without an approval requirement.
+
+### CI status normalization
+
+The selected CheckRun and StatusContext nodes are normalized before they are
+aggregated:
+
+| Output | GitHub states |
+| ------ | ------------- |
+| `SUCCESS` | `SUCCESS`, `SKIPPED`, `NEUTRAL` |
+| `PENDING` | `PENDING`, `EXPECTED`, `QUEUED`, `IN_PROGRESS`, `WAITING`, `REQUESTED` |
+| `FAILURE` | `FAILURE`, `ERROR`, `CANCELLED`, `TIMED_OUT`, `ACTION_REQUIRED`, `STARTUP_FAILURE`, `STALE` |
+| `UNKNOWN` | Missing, unrecognized, internally inconsistent, or absent selected checks |
+
+Aggregation uses `FAILURE` first, then `UNKNOWN`, `PENDING`, and `SUCCESS`.
 
 Here are a few examples of how to use the evaluations input:
 
@@ -60,7 +99,7 @@ Here are a few examples of how to use the evaluations input:
 - `evaluations: approved,ci_passing` - Checks if the pull request is approved and has passing CI
 - `evaluations: approved,mergeable,min_approvals=2` - Checks if the pull request is approved, mergeable, and has at least 2 approvals
 - `evaluations: approved,ci_passing,mergeable,min_approvals=2` - Checks if the pull request is approved, has passing CI, is mergeable, and has at least 2 approvals
-- `evaluations: min_approvals=1` - Checks if the pull request has at least 1 approval (does not even need to be in an approved state for this to pass). This can be useful if you want to check that at least someone has looked at the PR, but you don't care about the full approval state.
+- `evaluations: min_approvals=1` - Checks if the pull request has at least 1 current non-bot approval without requiring GitHub's overall review decision to be `APPROVED`.
 - `evaluations: not_draft` - Checks if the pull request is not in draft status. This can be useful when combined with label automation to prevent applying labels to draft PRs.
 - `evaluations: approved,not_draft,ci_passing` - Checks if the pull request is approved, not in draft status, and has passing CI
 
@@ -74,7 +113,7 @@ permissions:
   contents: read
   checks: read
   statuses: read
-  pull-requests: write # write is required to add/removes labels from the given pull request (set to read if you don't want to use the labels feature of this action)
+  pull-requests: write # write is required to add or remove labels (use read if no label inputs are configured)
 
 # run on all sorts of different pull request related events
 on:
@@ -94,7 +133,7 @@ jobs:
           evaluations: approved,ci_passing # evaluate the given PR against the approved and ci_passing attributes
           exclude_checks: pr-status,my-other-check # exclude the pr-status check and my-other-check from CI evaluation
           pass_labels: ready-for-deployment # if the PR passes evaluation, apply the ready-for-deployment label
-      
+
       # view some extra outputs the action sets
       # your workflow can now run separate logic based on these outputs
       - name: outputs
@@ -108,6 +147,13 @@ jobs:
           echo "is draft ${{ steps.pr-status.outputs.is_draft }}"
           echo "...."
 ```
+
+Configured label names are trimmed and deduplicated in their original order.
+When removals are requested, the action lists all current labels and removes
+only selected labels that are present. It then adds selected labels in one
+request. If the chosen outcome selects the same label for addition and removal,
+addition wins. A requested label mutation that still fails after bounded
+retries fails the action step.
 
 ## How to Exclude Certain CI Checks 🚫
 
@@ -191,7 +237,9 @@ The action intelligently handles both types and uses the appropriate field for e
 This project deliberately keeps its dependency and build surface small. The
 maintained source, tests, and Node-based repository helpers are TypeScript. The
 test suite uses Node's built-in test runner, assertions, mocks, and coverage
-instead of a third-party test framework.
+instead of a third-party test framework. The shipped action has no production
+npm dependencies; its GitHub Actions protocol and GitHub.com API client are
+implemented with Node's standard library.
 
 Use the exact toolchain declared by the repository:
 

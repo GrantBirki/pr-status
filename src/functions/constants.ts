@@ -1,4 +1,3 @@
-// Constants for pull request status values
 export const PR_STATUS = {
   SUCCESS: 'SUCCESS',
   FAILURE: 'FAILURE',
@@ -6,48 +5,58 @@ export const PR_STATUS = {
   UNKNOWN: 'UNKNOWN'
 } as const
 
-// Constants for review decision values
+export type CommitStatus = (typeof PR_STATUS)[keyof typeof PR_STATUS]
+
 export const REVIEW_DECISION = {
   APPROVED: 'APPROVED',
   CHANGES_REQUESTED: 'CHANGES_REQUESTED',
   REVIEW_REQUIRED: 'REVIEW_REQUIRED'
 } as const
 
-// Constants for merge state status values
-export const MERGE_STATE = {
-  CLEAN: 'CLEAN',
-  DIRTY: 'DIRTY',
-  UNKNOWN: 'UNKNOWN',
-  DRAFT: 'DRAFT',
-  BLOCKED: 'BLOCKED'
-} as const
-
-// Constants for evaluation results
 export const EVALUATION_RESULT = {
   PASS: 'PASS',
   FAIL: 'FAIL'
 } as const
 
-// Constants for check status values
-export const CHECK_STATUS = {
-  SUCCESS: 'SUCCESS',
-  FAILURE: 'FAILURE',
-  PENDING: 'PENDING',
-  SKIPPED: 'SKIPPED',
-  NEUTRAL: 'NEUTRAL'
-} as const
+export type EvaluationResult =
+  (typeof EVALUATION_RESULT)[keyof typeof EVALUATION_RESULT]
 
-// Constants for evaluation criteria
-export const EVALUATION_CRITERIA = {
-  APPROVED: 'approved',
-  MERGEABLE: 'mergeable',
-  CI_PASSING: 'ci_passing',
-  MIN_APPROVALS: 'min_approvals',
-  NOT_DRAFT: 'not_draft'
-} as const
-
-// Constants for check types
 export const CHECK_TYPES = {
   REQUIRED: 'required',
   ALL: 'all'
 } as const
+
+export type CheckSelection = (typeof CHECK_TYPES)[keyof typeof CHECK_TYPES]
+
+export const EVALUATION_CRITERIA = {
+  APPROVED: 'approved',
+  CI_PASSING: 'ci_passing',
+  MERGEABLE: 'mergeable',
+  NOT_DRAFT: 'not_draft',
+  MIN_APPROVALS: 'min_approvals'
+} as const
+
+export const SUCCESSFUL_CHECK_STATES: readonly string[] = [
+  'SUCCESS',
+  'SKIPPED',
+  'NEUTRAL'
+]
+
+export const PENDING_CHECK_STATES: readonly string[] = [
+  'PENDING',
+  'EXPECTED',
+  'QUEUED',
+  'IN_PROGRESS',
+  'WAITING',
+  'REQUESTED'
+]
+
+export const FAILING_CHECK_STATES: readonly string[] = [
+  'FAILURE',
+  'ERROR',
+  'CANCELLED',
+  'TIMED_OUT',
+  'ACTION_REQUIRED',
+  'STARTUP_FAILURE',
+  'STALE'
+]

@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {COLORS} from '../../src/functions/colors.ts'
 import {
-  CHECK_STATUS,
   CHECK_TYPES,
   EVALUATION_CRITERIA,
   EVALUATION_RESULT,
-  MERGE_STATE,
+  FAILING_CHECK_STATES,
+  PENDING_CHECK_STATES,
   PR_STATUS,
-  REVIEW_DECISION
+  REVIEW_DECISION,
+  SUCCESSFUL_CHECK_STATES
 } from '../../src/functions/constants.ts'
 
-test('exports the documented status and evaluation constants', () => {
+test('exports the finite domain values', () => {
   assert.deepEqual(PR_STATUS, {
     SUCCESS: 'SUCCESS',
     FAILURE: 'FAILURE',
@@ -24,38 +24,38 @@ test('exports the documented status and evaluation constants', () => {
     CHANGES_REQUESTED: 'CHANGES_REQUESTED',
     REVIEW_REQUIRED: 'REVIEW_REQUIRED'
   })
-  assert.deepEqual(MERGE_STATE, {
-    CLEAN: 'CLEAN',
-    DIRTY: 'DIRTY',
-    UNKNOWN: 'UNKNOWN',
-    DRAFT: 'DRAFT',
-    BLOCKED: 'BLOCKED'
-  })
   assert.deepEqual(EVALUATION_RESULT, {PASS: 'PASS', FAIL: 'FAIL'})
-  assert.deepEqual(CHECK_STATUS, {
-    SUCCESS: 'SUCCESS',
-    FAILURE: 'FAILURE',
-    PENDING: 'PENDING',
-    SKIPPED: 'SKIPPED',
-    NEUTRAL: 'NEUTRAL'
-  })
+  assert.deepEqual(CHECK_TYPES, {REQUIRED: 'required', ALL: 'all'})
   assert.deepEqual(EVALUATION_CRITERIA, {
     APPROVED: 'approved',
-    MERGEABLE: 'mergeable',
     CI_PASSING: 'ci_passing',
-    MIN_APPROVALS: 'min_approvals',
-    NOT_DRAFT: 'not_draft'
+    MERGEABLE: 'mergeable',
+    NOT_DRAFT: 'not_draft',
+    MIN_APPROVALS: 'min_approvals'
   })
-  assert.deepEqual(CHECK_TYPES, {REQUIRED: 'required', ALL: 'all'})
 })
 
-test('exports the ANSI color constants', () => {
-  assert.deepEqual(COLORS, {
-    highlight: '\u001b[35m',
-    info: '\u001b[34m',
-    success: '\u001b[32m',
-    warning: '\u001b[33m',
-    error: '\u001b[31m',
-    reset: '\u001b[0m'
-  })
+test('exports every raw check-state classification', () => {
+  assert.deepEqual(SUCCESSFUL_CHECK_STATES, [
+    'SUCCESS',
+    'SKIPPED',
+    'NEUTRAL'
+  ])
+  assert.deepEqual(PENDING_CHECK_STATES, [
+    'PENDING',
+    'EXPECTED',
+    'QUEUED',
+    'IN_PROGRESS',
+    'WAITING',
+    'REQUESTED'
+  ])
+  assert.deepEqual(FAILING_CHECK_STATES, [
+    'FAILURE',
+    'ERROR',
+    'CANCELLED',
+    'TIMED_OUT',
+    'ACTION_REQUIRED',
+    'STARTUP_FAILURE',
+    'STALE'
+  ])
 })

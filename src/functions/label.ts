@@ -1,109 +1,113 @@
-import * as core from '@actions/core'
+import type {ActionContext} from '../context.ts'
+import type {GitHubClient} from '../github.ts'
 
-import type {
-  CoreDependencies,
-  IssueNumber,
-  LabelClient,
-  LabelResult,
-  RepositoryOnlyContext
-} from '../types.ts'
+export type RepositoryContext = Pick<ActionContext, 'repo'>
+export type LabelClient = Pick<
+  GitHubClient,
+  'listIssueLabels' | 'removeLabel' | 'addLabels'
+>
 
-const defaultDependencies: CoreDependencies = {core}
+export interface LabelResult {
+  added: string[]
+  removed: string[]
+}
 
-/**
- * Add and remove labels from a pull request
- * @param {string} issueNumber - The issue number to add the labels to
- * @param {Object} context - The GitHub Actions event context
- * @param {Object} octokit - The octokit client
- * @param {Array} labelsToAdd - An array of labels to add to the pull request
- * @param {Array} labelsToRemove - An array of labels to remove from the pull request
- * @returns {Object} An object containing the labels added and removed
- */
-export async function label(
-  issueNumber: IssueNumber,
-  context: RepositoryOnlyContext,
-  octokit: LabelClient,
-  labelsToAdd: string[],
-  labelsToRemove: string[],
-  dependencies: CoreDependencies = defaultDependencies
-): Promise<LabelResult> {
-  const coreApi = dependencies.core
-  const {owner, repo} = context.repo
-  const addedLabels: string[] = [] // an array of labels that were actually added
-  const removedLabels: string[] = [] // an array of labels that were actually removed
+export interface LabelActions {
+  labelsToAdd: string[]
+  labelsToRemove: string[]
+}
 
-  // Exit early if there are no labels to add or remove
-  if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
-    coreApi.info('🏷️ No labels to add or remove')
-    return {
-      added: [],
-      removed: []
-    }
-  }
+interface LabelCoreApi {
+  debug(message: string): void
+  info(message: string): void
+}
 
-  coreApi.info(`🏷️ Processing labels for PR #${issueNumber}`)
+interface LabelDependencies {
+  core: LabelCoreApi
+}
 
-  // First, find and cleanup labelsToRemove if any are provided
-  if (labelsToRemove.length > 0) {
-    coreApi.debug('🔍 Fetching current labels on the issue')
-
-    try {
-      const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
-        owner: owner,
-        repo: repo,
-        issue_number: issueNumber
-      })
-      const currentLabels = currentLabelsResult.data.map(label => label.name)
-
-      coreApi.debug(`📋 Current labels: ${currentLabels.join(', ')}`)
-      coreApi.debug(`❌ Labels to remove: ${labelsToRemove.join(', ')}`)
-
-      // Remove unwanted labels
-      for (const label of labelsToRemove) {
-        if (currentLabels.includes(label)) {
-          await octokit.rest.issues.removeLabel({
-            owner: owner,
-            repo: repo,
-            issue_number: issueNumber,
-            name: label
-          })
-          coreApi.info(`🏷️ ❌ Label removed: ${label}`)
-          removedLabels.push(label)
-        } else {
-          coreApi.info(
-            `🏷️ ⚠️ Label not found: '${label}' so it was not removed`
-          )
-        }
-      }
-    } catch (error: unknown) {
-      const labelError = error as Error
-      coreApi.warning(
-        `⚠️ Failed to process label removal: ${labelError.message}`
-      )
-    }
-  }
-
-  // Now, add the labels if any are provided
-  if (labelsToAdd.length > 0) {
-    coreApi.debug(`🔍 Attempting to apply labels: ${labelsToAdd.join(', ')}`)
-
-    try {
-      await octokit.rest.issues.addLabels({
-        owner: owner,
-        repo: repo,
-        issue_number: issueNumber,
-        labels: labelsToAdd
-      })
-      coreApi.info(`🏷️ ✅ Labels added: ${labelsToAdd.join(', ')}`)
-      addedLabels.push(...labelsToAdd)
-    } catch (error: unknown) {
-      const labelError = error as Error
-      coreApi.warning(`⚠️ Failed to add labels: ${labelError.message}`)
-    }
-  }
+export function determineLabelActions(
+  passed: boolean,
+  passLabels: readonly string[],
+  failLabels: readonly string[],
+  passLabelsCleanup: readonly string[]
+): LabelActions {
+  const add = normalizeLabels(passed ? passLabels : failLabels)
+  const remove = normalizeLabels(
+    passed ? [...failLabels, ...passLabelsCleanup] : passLabels
+  )
+  const additions = new Set(add)
 
   return {
-    added: addedLabels,
-    removed: removedLabels
+    labelsToAdd: add,
+    labelsToRemove: remove.filter(label => !additions.has(label))
   }
+}
+
+export async function label(
+  pullRequestNumber: number,
+  context: RepositoryContext,
+  client: LabelClient,
+  labelsToAdd: readonly string[],
+  labelsToRemove: readonly string[],
+  dependencies: LabelDependencies
+): Promise<LabelResult> {
+  const {core} = dependencies
+  const add = normalizeLabels(labelsToAdd)
+  const additions = new Set(add)
+  const remove = normalizeLabels(labelsToRemove).filter(
+    name => !additions.has(name)
+  )
+
+  if (add.length === 0 && remove.length === 0) {
+    core.info('🏷️ No labels to add or remove')
+    return {added: [], removed: []}
+  }
+
+  const request = {
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    number: pullRequestNumber
+  }
+  const removed: string[] = []
+
+  core.info(`🏷️ Processing labels for PR #${pullRequestNumber}`)
+  if (remove.length > 0) {
+    core.debug('🔍 Fetching current labels on the issue')
+    const current = new Set(await client.listIssueLabels(request))
+
+    for (const name of remove) {
+      if (!current.has(name)) {
+        core.info(`🏷️ ⚠️ Label not found: '${name}' so it was not removed`)
+        continue
+      }
+
+      await client.removeLabel({...request, name})
+      removed.push(name)
+      core.info(`🏷️ ❌ Label removed: ${name}`)
+    }
+  }
+
+  if (add.length > 0) {
+    core.debug(`🔍 Attempting to apply labels: ${add.join(', ')}`)
+    await client.addLabels({...request, labels: add})
+    core.info(`🏷️ ✅ Labels added: ${add.join(', ')}`)
+  }
+
+  return {added: add, removed}
+}
+
+function normalizeLabels(labels: readonly string[]): string[] {
+  const result: string[] = []
+  const seen = new Set<string>()
+
+  for (const label of labels) {
+    const trimmed = label.trim()
+    if (trimmed !== '' && !seen.has(trimmed)) {
+      seen.add(trimmed)
+      result.push(trimmed)
+    }
+  }
+
+  return result
 }

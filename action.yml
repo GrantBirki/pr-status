@@ -1,12 +1,12 @@
 name: "pr-status"
-description: "A GitHub Action that checks the status of a pull request"
+description: "A dependency-free runtime action that checks pull request status on GitHub.com"
 author: "Grant Birkinbine"
 branding:
   icon: 'check'
   color: 'green'
 inputs:
   github_token:
-    description: The GitHub token used to create an authenticated client - Provided for you by default!
+    description: The GitHub.com token used to read pull request state and, when requested, reconcile labels
     default: ${{ github.token }}
     required: true
   workflow:
@@ -14,50 +14,50 @@ inputs:
     default: ${{ github.workflow }}
     required: false
   pr_number:
-    description: The number of the pull request to check the status of
+    description: A positive integer identifying the pull request to evaluate
     default: ${{ github.event.number }}
     required: true
   checks:
-    description: Whether to only look for `required` ci checks or `all` ci checks on the pull request
+    description: Exactly `required` or `all`, selecting which CI checks to evaluate
     default: all
     required: true
   evaluations:
-    description: 'The attributes (comma separated list) to evaluate the pull request against when determining its status on a PASS/FAIL system. This plays into the `evaluation` output. Full example: approved,ci_passing,mergeable,not_draft'
+    description: 'A case-sensitive comma-separated list containing approved, ci_passing, mergeable, not_draft, or min_approvals=N. Invalid criteria fail the action; an explicitly empty list evaluates to PASS.'
     default: 'approved' # this says that the pull request must be approved and that is it
     required: false
   pass_labels:
-    description: The labels to apply to the pull request if the evaluation passes - a comma separated list
+    description: A comma-separated list of labels to apply when evaluation passes
     default: ''
     required: false
   pass_labels_cleanup:
-    description: 'An optional list of labels too "clean up" (remove) if the pull request passes evaluation - Examples: `"ready-for-review,waiting"`'
+    description: 'A comma-separated list of labels to remove when evaluation passes'
     default: ''
     required: false
   fail_labels:
-    description: The labels to apply to the pull request if the evaluation fails - a comma separated list
+    description: A comma-separated list of labels to apply when evaluation fails
     default: ''
     required: false
   exclude_checks:
-    description: 'A comma separated list of check names to exclude from CI status evaluation'
+    description: 'A case-sensitive comma-separated list of exact check names to exclude from CI evaluation'
     default: ''
     required: false
 outputs:
   approved:
-    description: 'The string "true" if the pull request is in a fully approved state, "false" otherwise'
+    description: 'The string "true" when reviewDecision is APPROVED or null, and "false" otherwise'
   total_approvals:
-    description: 'The total number of approvals on the pull request'
+    description: 'The number of unique non-bot actors whose latest review is APPROVED'
   review_decision:
-    description: 'The decision of the pull request review status - Examples: "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", `null`, etc'
+    description: 'The pull request review decision, such as APPROVED, CHANGES_REQUESTED, or REVIEW_REQUIRED; empty when GitHub returns null'
   merge_state_status:
     description: 'The status of the pull request merge state - Examples: "CLEAN", "DIRTY", "UNKNOWN", "DRAFT", "BLOCKED", etc'
   mergeable_state:
     description: 'The mergeable state of the pull request - Examples: "MERGEABLE", "UNSTABLE", "CONFLICTING", "UNKNOWN", etc'
   commit_status:
-    description: 'The ci status for the latest commit on the pull request - Examples: "SUCCESS", "FAILURE", "PENDING", `null`, etc'
+    description: 'The normalized CI status for the latest commit: SUCCESS, FAILURE, PENDING, or UNKNOWN'
   is_draft:
     description: 'The string "true" if the pull request is in draft status, "false" otherwise'
   evaluation:
-    description: 'The overall evaluation of the pull request based on the evaluations input - Examples: "PASS", "FAIL"'
+    description: 'PASS or FAIL after ANDing every requested criterion. FAIL is a normal result and does not fail the action step.'
 runs:
   using: "node24"
   main: "dist/index.js"

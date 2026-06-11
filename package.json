@@ -2,7 +2,7 @@
   "name": "pr-status",
   "version": "0.0.0",
   "private": true,
-  "description": "A GitHub Action that checks the status of a pull request",
+  "description": "A dependency-free runtime action that checks pull request status on GitHub.com",
   "type": "module",
   "main": "dist/index.js",
   "packageManager": "npm@11.13.0",
@@ -13,7 +13,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "npm run typecheck",
-    "package": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "package": "node --input-type=module -e \"import {rmSync} from 'node:fs'; rmSync('dist', {recursive: true, force: true})\" && ncc build src/index.ts -o dist --source-map --license licenses.txt && node --input-type=module -e \"import {closeSync, openSync} from 'node:fs'; closeSync(openSync('dist/licenses.txt', 'a'))\"",
     "coverage-badge": "node scripts/coverage-badge.ts",
     "test": "npm run ci-test && npm run coverage-badge",
     "ci-test": "node --test --test-concurrency=1 --experimental-test-coverage --test-coverage-include='src/**/*.ts' --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 test/*.test.ts test/functions/*.test.ts",
@@ -30,11 +30,7 @@
   ],
   "author": "Grant Birkinbine",
   "license": "MIT",
-  "dependencies": {
-    "@actions/core": "1.11.1",
-    "@actions/github": "6.0.1",
-    "@octokit/plugin-retry": "6.1.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "24.12.2",
     "@vercel/ncc": "0.38.4",
