@@ -21,7 +21,7 @@ import type {GitHubClient} from './github.ts'
 
 export interface ActionInputs {
   token: string
-  workflow: string
+  currentCheckName: string
   checks: CheckSelection
   evaluations: string[]
   passLabels: string[]
@@ -61,7 +61,7 @@ export function parseInputs(
 ): ActionInputs {
   const {core, stringToArray} = dependencies
   const token = core.getInput('github_token', {required: true})
-  const workflow = core.getInput('workflow') || context.workflow
+  const currentCheckName = core.getInput('workflow') || context.job
   const checks = parseCheckSelection(
     core.getInput('checks', {required: true})
   )
@@ -84,7 +84,7 @@ export function parseInputs(
 
   return {
     token,
-    workflow,
+    currentCheckName,
     checks,
     evaluations,
     passLabels,
@@ -151,7 +151,7 @@ export async function run(
       {
         checks: inputs.checks,
         excludeChecks: inputs.excludeChecks,
-        workflow: inputs.workflow
+        currentCheckName: inputs.currentCheckName
       },
       {core}
     )

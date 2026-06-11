@@ -197,7 +197,7 @@ function loadActionContext(dependencies = {
         throw new Error('GITHUB_REPOSITORY must use the owner/repository format');
     }
     const eventPath = requiredEnvironmentValue(environment, 'GITHUB_EVENT_PATH');
-    const workflow = requiredEnvironmentValue(environment, 'GITHUB_WORKFLOW');
+    const job = requiredEnvironmentValue(environment, 'GITHUB_JOB');
     const payload = parseEventPayload(dependencies.readFile(eventPath));
     const issueNumber = nestedIssueNumber(payload, 'pull_request') ??
         nestedIssueNumber(payload, 'issue') ??
@@ -207,7 +207,7 @@ function loadActionContext(dependencies = {
             owner,
             repo
         },
-        workflow,
+        job,
         issueNumber
     };
 }
@@ -479,10 +479,10 @@ function countUniqueApprovals(reviews) {
     }
     return approvedActors.size;
 }
-function determineCommitStatus(checks, checkSelection, excludeChecks, workflow) {
+function determineCommitStatus(checks, checkSelection, excludeChecks, currentCheckName) {
     const exclusions = new Set(normalizeConfiguredNames(excludeChecks));
-    if (workflow !== undefined && workflow.trim() !== '') {
-        exclusions.add(workflow.trim());
+    if (currentCheckName !== undefined && currentCheckName.trim() !== '') {
+        exclusions.add(currentCheckName.trim());
     }
     const selectedChecks = checks.filter(check => {
         if (checkSelection === CHECK_TYPES.REQUIRED && !check.isRequired) {
@@ -498,8 +498,9 @@ async function status_status(client, context, pullRequestNumber, data, dependenc
     const { core } = dependencies;
     const exclusions = normalizeConfiguredNames(data.excludeChecks ?? []);
     core.info('🔍 Fetching pull request status information...');
-    if (data.workflow !== undefined && data.workflow.trim() !== '') {
-        exclusions.push(data.workflow.trim());
+    if (data.currentCheckName !== undefined &&
+        data.currentCheckName.trim() !== '') {
+        exclusions.push(data.currentCheckName.trim());
     }
     core.info(`🚫 Checks to exclude from status evaluation: ${normalizeConfiguredNames(exclusions).join(', ')}`);
     const pullRequest = await client.getPullRequestStatus({
@@ -507,7 +508,7 @@ async function status_status(client, context, pullRequestNumber, data, dependenc
         repo: context.repo.repo,
         number
     });
-    const commitStatus = determineCommitStatus(pullRequest.checks, checkSelection, data.excludeChecks ?? [], data.workflow);
+    const commitStatus = determineCommitStatus(pullRequest.checks, checkSelection, data.excludeChecks ?? [], data.currentCheckName);
     const result = {
         review_decision: pullRequest.reviewDecision,
         total_approvals: countUniqueApprovals(pullRequest.latestReviews),
@@ -1089,7 +1090,7 @@ const defaultDependencies = {
 function parseInputs(dependencies, context) {
     const { core, stringToArray } = dependencies;
     const token = core.getInput('github_token', { required: true });
-    const workflow = core.getInput('workflow') || context.workflow;
+    const currentCheckName = core.getInput('workflow') || context.job;
     const checks = parseCheckSelection(core.getInput('checks', { required: true }));
     const evaluations = stringToArray(core.getInput('evaluations'));
     const passLabels = stringToArray(core.getInput('pass_labels'));
@@ -1104,7 +1105,7 @@ function parseInputs(dependencies, context) {
     core.debug('📋 Parsed and validated inputs successfully');
     return {
         token,
-        workflow,
+        currentCheckName,
         checks,
         evaluations,
         passLabels,
@@ -1150,7 +1151,7 @@ async function run(dependencies = defaultDependencies) {
         const statusResult = await dependencies.status(client, context, inputs.prNumber, {
             checks: inputs.checks,
             excludeChecks: inputs.excludeChecks,
-            workflow: inputs.workflow
+            currentCheckName: inputs.currentCheckName
         }, { core });
         const passed = dependencies.outputs(statusResult, { evaluations: inputs.evaluations }, { core });
         core.info(`📊 Evaluation result: ${passed ? 'PASS ✅' : 'FAIL ❌'}`);

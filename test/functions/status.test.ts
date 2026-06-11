@@ -201,21 +201,36 @@ test('counts unique current approved humans and excludes bots', () => {
   )
 })
 
-test('selects required or all checks with exact configured and workflow exclusions', () => {
+test('selects checks with exact configured and current-check exclusions', () => {
+  const currentCheckName = 'Pull request checks / evaluate (ubuntu-latest)'
   const checks = [
     checkRun('build', 'FAILURE', 'COMPLETED', true),
     checkRun('Build', 'SUCCESS', 'COMPLETED', true),
-    checkRun('workflow / job', 'FAILURE', 'COMPLETED', true),
+    checkRun(currentCheckName, 'FAILURE', 'COMPLETED', true),
     statusContext('optional', 'PENDING', false)
   ]
 
   assert.equal(
-    determineCommitStatus(checks, 'required', [' build ', '', 'build'], 'workflow / job'),
+    determineCommitStatus(
+      checks,
+      'required',
+      [' build ', '', 'build'],
+      ` ${currentCheckName} `
+    ),
     'SUCCESS'
   )
   assert.equal(
-    determineCommitStatus(checks, 'all', ['build'], 'workflow / job'),
+    determineCommitStatus(checks, 'all', ['build'], currentCheckName),
     'PENDING'
+  )
+  assert.equal(
+    determineCommitStatus(
+      checks,
+      'required',
+      ['build'],
+      currentCheckName.toUpperCase()
+    ),
+    'FAILURE'
   )
   assert.equal(
     determineCommitStatus(
@@ -230,7 +245,7 @@ test('selects required or all checks with exact configured and workflow exclusio
   assert.equal(determineCommitStatus([], 'all', [], '   '), 'UNKNOWN')
 })
 
-test('fetches validated status data and computes four-state outputs', async () => {
+test('fetches status and excludes only the exact current check name', async () => {
   const core = createRecordingCore()
   const client = recordingClient(
     pullRequest({
@@ -240,7 +255,8 @@ test('fetches validated status data and computes four-state outputs', async () =
       isDraft: true,
       checks: [
         checkRun('build', 'SUCCESS'),
-        statusContext('current workflow', 'FAILURE')
+        statusContext('Pull request checks', 'PENDING'),
+        statusContext('evaluate (node 24)', 'FAILURE')
       ],
       latestReviews: [review('alice'), review('alice'), review('robot', 'APPROVED', 'Bot')]
     })
@@ -253,7 +269,7 @@ test('fetches validated status data and computes four-state outputs', async () =
     {
       checks: 'all',
       excludeChecks: [' docs ', 'docs'],
-      workflow: ' current workflow '
+      currentCheckName: ' evaluate (node 24) '
     },
     {core: core.core}
   )
@@ -267,15 +283,15 @@ test('fetches validated status data and computes four-state outputs', async () =
     merge_state_status: 'BLOCKED',
     mergeable_state: 'CONFLICTING',
     is_draft: true,
-    commit_status: 'SUCCESS'
+    commit_status: 'PENDING'
   })
   assert.ok(includesMessage(core.info, 'Fetching pull request status'))
-  assert.ok(includesMessage(core.info, 'docs, current workflow'))
-  assert.ok(includesMessage(core.info, 'Commit Status: SUCCESS'))
+  assert.ok(includesMessage(core.info, 'docs, evaluate (node 24)'))
+  assert.ok(includesMessage(core.info, 'Commit Status: PENDING'))
   assert.ok(includesMessage(core.debug, '"total_approvals":1'))
 })
 
-test('omits an empty workflow from exclusion logging', async () => {
+test('omits an empty current check name from exclusion logging', async () => {
   const core = createRecordingCore()
   const client = recordingClient(pullRequest({checks: []}))
 
@@ -283,7 +299,7 @@ test('omits an empty workflow from exclusion logging', async () => {
     client.client,
     {repo: {owner: 'octocat', repo: 'example'}},
     42,
-    {checks: 'required', workflow: '   '},
+    {checks: 'required', currentCheckName: '   '},
     {core: core.core}
   )
 

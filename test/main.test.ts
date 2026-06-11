@@ -22,7 +22,7 @@ import {createRecordingCore} from './functions/helpers.ts'
 
 const context: ActionContext = {
   repo: {owner: 'octocat', repo: 'example'},
-  workflow: 'Pull request checks',
+  job: 'evaluate',
   issueNumber: 42
 }
 
@@ -117,7 +117,7 @@ function createRunFixture(
       assert.deepEqual(data, {
         checks: 'all',
         excludeChecks: ['self'],
-        workflow: 'Pull request checks'
+        currentCheckName: 'Pull request checks'
       })
       return statusResult
     },
@@ -198,14 +198,14 @@ async function waitForOutput(
   throw new Error(`Timed out waiting for ${expectedText}`)
 }
 
-test('parseInputs validates and normalizes explicit action inputs', () => {
+test('parseInputs validates and normalizes an explicit current check name', () => {
   const recording = createRecordingCore()
   const inputs = parseInputs(
     {
       core: coreWithInputs(
         {
           github_token: 'never-log-this-value',
-          workflow: 'Explicit workflow',
+          workflow: '  CI / evaluate (ubuntu-latest)  ',
           checks: 'required',
           evaluations: 'approved, ci_passing',
           pass_labels: 'ready, ready, done',
@@ -223,7 +223,7 @@ test('parseInputs validates and normalizes explicit action inputs', () => {
 
   assert.deepEqual(inputs, {
     token: 'never-log-this-value',
-    workflow: 'Explicit workflow',
+    currentCheckName: 'CI / evaluate (ubuntu-latest)',
     checks: 'required',
     evaluations: ['approved', 'ci_passing'],
     passLabels: ['ready', 'ready', 'done'],
@@ -243,7 +243,7 @@ test('parseInputs validates and normalizes explicit action inputs', () => {
   )
 })
 
-test('parseInputs supports context fallbacks and an empty evaluation list', () => {
+test('parseInputs falls back from an empty workflow input to the context job', () => {
   const recording = createRecordingCore()
   const inputs = parseInputs(
     {
@@ -256,7 +256,7 @@ test('parseInputs supports context fallbacks and an empty evaluation list', () =
     context
   )
 
-  assert.equal(inputs.workflow, context.workflow)
+  assert.equal(inputs.currentCheckName, context.job)
   assert.equal(inputs.prNumber, context.issueNumber)
   assert.deepEqual(inputs.evaluations, [])
 })
@@ -403,9 +403,9 @@ test('native bundled-style entrypoint executes with read-only API behavior', asy
     GITHUB_API_URL: 'https://api.github.com',
     GITHUB_EVENT_PATH: eventPath,
     GITHUB_GRAPHQL_URL: 'https://api.github.com/graphql',
+    GITHUB_JOB: 'integration',
     GITHUB_OUTPUT: outputPath,
     GITHUB_REPOSITORY: 'octocat/example',
-    GITHUB_WORKFLOW: 'Integration workflow',
     INPUT_GITHUB_TOKEN: 'synthetic-entrypoint-value',
     INPUT_WORKFLOW: '',
     INPUT_CHECKS: 'all',
