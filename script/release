@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Usage:
 # script/release
 
@@ -9,58 +11,73 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 
-# Read the version from src/version.js
-version_file="src/version.js"
-if [[ ! -f $version_file ]]; then
-  echo -e "${RED}ERROR${OFF} - Version file not found: $version_file"
-  exit 1
-fi
+repo_root=$(git rev-parse --show-toplevel)
+cd "${repo_root}"
 
-version_line=$(grep 'export const VERSION' $version_file)
-if [[ -z $version_line ]]; then
-  echo -e "${RED}ERROR${OFF} - Version line not found in: $version_file"
-  exit 1
-fi
-
-# Extract the version value
-new_tag=$(echo $version_line | sed -E "s/export const VERSION = '([^']+)'/\1/")
-if [[ -z $new_tag ]]; then
-  echo -e "${RED}ERROR${OFF} - Failed to extract version from: $version_file"
-  exit 1
-fi
-
-# Validate the version tag format
+expected_branch='main'
+version_file='src/version.ts'
 tag_regex='^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
-echo "$new_tag" | grep -E "$tag_regex" > /dev/null
 
-if [[ $? -ne 0 ]]; then
-  echo -e "${RED}ERROR${OFF} - Tag: $new_tag is not valid. Please use vX.X.X or vX.X.X-rc.X format."
+if [[ ! -f "${version_file}" ]]; then
+  printf '%bERROR%b - Version file not found: %s\n' "${RED}" "${OFF}" "${version_file}"
   exit 1
 fi
 
-# Get the latest tag
-latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1))
-echo -e "The latest release tag is: ${BLUE}${latest_tag}${OFF}"
+new_tag=$(sed -nE "s/^[[:space:]]*export const VERSION[[:space:]]*=[[:space:]]*'(v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?)'[[:space:]]*$/\\1/p" "${version_file}")
+if [[ -z "${new_tag}" || ! "${new_tag}" =~ ${tag_regex} ]]; then
+  printf '%bERROR%b - Failed to read a valid version from: %s\n' "${RED}" "${OFF}" "${version_file}"
+  exit 1
+fi
 
-# Confirm the new tag
-read -p "New Release Tag (press ENTER for default: ${new_tag}): " input_tag
-new_tag=${input_tag:-$new_tag}
+current_branch=$(git branch --show-current)
+if [[ "${current_branch}" != "${expected_branch}" ]]; then
+  printf '%bERROR%b - Releases must be created from %s, not %s.\n' "${RED}" "${OFF}" "${expected_branch}" "${current_branch}"
+  exit 1
+fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  printf '%bERROR%b - The working tree must be clean before releasing.\n' "${RED}" "${OFF}"
+  git status --short
+  exit 1
+fi
+
+git fetch --quiet --tags origin "+refs/heads/${expected_branch}:refs/remotes/origin/${expected_branch}"
+
+local_head=$(git rev-parse HEAD)
+remote_head=$(git rev-parse "refs/remotes/origin/${expected_branch}")
+if [[ "${local_head}" != "${remote_head}" ]]; then
+  printf '%bERROR%b - Local %s must exactly match origin/%s.\n' "${RED}" "${OFF}" "${expected_branch}" "${expected_branch}"
+  exit 1
+fi
+
+if git show-ref --verify --quiet "refs/tags/${new_tag}"; then
+  printf '%bERROR%b - Tag already exists: %s\n' "${RED}" "${OFF}" "${new_tag}"
+  exit 1
+fi
+
+latest_tag=$(git describe --tags "$(git rev-list --tags --max-count=1)" 2>/dev/null || true)
+if [[ -n "${latest_tag}" ]]; then
+  printf 'The latest release tag is: %b%s%b\n' "${BLUE}" "${latest_tag}" "${OFF}"
+else
+  printf 'No existing release tags were found.\n'
+fi
+
+printf 'Release tag from %s: %b%s%b\n' "${version_file}" "${BLUE}" "${new_tag}" "${OFF}"
+read -r -p "Create and push ${new_tag} from ${expected_branch}? [y/N] " confirmation
+if [[ "${confirmation}" != 'y' && "${confirmation}" != 'yes' ]]; then
+  printf 'Release cancelled.\n'
+  exit 0
+fi
 
 # Tag the new release
-git tag -a $new_tag -m "$new_tag Release"
-if [[ $? -ne 0 ]]; then
-  echo -e "${RED}ERROR${OFF} - Failed to create tag: $new_tag"
+git tag -a "${new_tag}" -m "${new_tag} Release"
+printf '%bOK%b - Tagged: %s\n' "${GREEN}" "${OFF}" "${new_tag}"
+
+# Push only the intended tag to the remote
+if ! git push origin "refs/tags/${new_tag}:refs/tags/${new_tag}"; then
+  printf '%bERROR%b - Failed to push tag. The local tag remains: %s\n' "${RED}" "${OFF}" "${new_tag}"
   exit 1
 fi
 
-echo -e "${GREEN}OK${OFF} - Tagged: $new_tag"
-
-# Push the tags to remote
-git push --tags
-if [[ $? -ne 0 ]]; then
-  echo -e "${RED}ERROR${OFF} - Failed to push tags to remote"
-  exit 1
-fi
-
-echo -e "${GREEN}OK${OFF} - Tags pushed to remote!"
-echo -e "${GREEN}DONE${OFF}"
+printf '%bOK%b - Pushed tag: %s\n' "${GREEN}" "${OFF}" "${new_tag}"
+printf '%bDONE%b\n' "${GREEN}" "${OFF}"

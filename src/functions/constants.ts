@@ -4,14 +4,14 @@ export const PR_STATUS = {
   FAILURE: 'FAILURE',
   PENDING: 'PENDING',
   UNKNOWN: 'UNKNOWN'
-}
+} as const
 
 // Constants for review decision values
 export const REVIEW_DECISION = {
   APPROVED: 'APPROVED',
   CHANGES_REQUESTED: 'CHANGES_REQUESTED',
   REVIEW_REQUIRED: 'REVIEW_REQUIRED'
-}
+} as const
 
 // Constants for merge state status values
 export const MERGE_STATE = {
@@ -20,13 +20,13 @@ export const MERGE_STATE = {
   UNKNOWN: 'UNKNOWN',
   DRAFT: 'DRAFT',
   BLOCKED: 'BLOCKED'
-}
+} as const
 
 // Constants for evaluation results
 export const EVALUATION_RESULT = {
   PASS: 'PASS',
   FAIL: 'FAIL'
-}
+} as const
 
 // Constants for check status values
 export const CHECK_STATUS = {
@@ -35,7 +35,7 @@ export const CHECK_STATUS = {
   PENDING: 'PENDING',
   SKIPPED: 'SKIPPED',
   NEUTRAL: 'NEUTRAL'
-}
+} as const
 
 // Constants for evaluation criteria
 export const EVALUATION_CRITERIA = {
@@ -44,10 +44,10 @@ export const EVALUATION_CRITERIA = {
   CI_PASSING: 'ci_passing',
   MIN_APPROVALS: 'min_approvals',
   NOT_DRAFT: 'not_draft'
-}
+} as const
 
 // Constants for check types
 export const CHECK_TYPES = {
   REQUIRED: 'required',
   ALL: 'all'
-}
+} as const

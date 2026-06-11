@@ -29,7 +29,7 @@ body:
         ```yaml
         - name: approved
           id: approved
-          uses: grantbirki/approved@vX.X.X
+          uses: GrantBirki/pr-status@vX.X.X
           with:
             ...
         ```

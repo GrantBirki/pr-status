@@ -4,7 +4,14 @@ import {
   EVALUATION_RESULT,
   EVALUATION_CRITERIA,
   PR_STATUS
-} from './constants'
+} from './constants.ts'
+import type {
+  ActionData,
+  CoreDependencies,
+  StatusResult
+} from '../types.ts'
+
+const defaultDependencies: CoreDependencies = {core}
 
 /**
  * Set GitHub Actions outputs and evaluate criteria
@@ -12,38 +19,44 @@ import {
  * @param {Object} data - The object containing the relevant data information
  * @returns {boolean} Whether all evaluation criteria pass
  */
-export function outputs(status, data) {
-  core.debug('📊 Setting GitHub Actions outputs...')
+export function outputs(
+  status: StatusResult,
+  data: Pick<ActionData, 'evaluations'>,
+  dependencies: CoreDependencies = defaultDependencies
+): boolean {
+  const coreApi = dependencies.core
+
+  coreApi.debug('📊 Setting GitHub Actions outputs...')
 
   // Set the outputs
-  core.setOutput('review_decision', status.review_decision || null)
-  core.setOutput('total_approvals', status.total_approvals || 0)
-  core.setOutput('merge_state_status', status.merge_state_status || null)
-  core.setOutput('commit_status', status.commit_status || null)
-  core.setOutput('mergeable_state', status.mergeable_state || null)
-  core.setOutput('is_draft', status.is_draft ? 'true' : 'false')
+  coreApi.setOutput('review_decision', status.review_decision || null)
+  coreApi.setOutput('total_approvals', status.total_approvals || 0)
+  coreApi.setOutput('merge_state_status', status.merge_state_status || null)
+  coreApi.setOutput('commit_status', status.commit_status || null)
+  coreApi.setOutput('mergeable_state', status.mergeable_state || null)
+  coreApi.setOutput('is_draft', status.is_draft ? 'true' : 'false')
 
   // Set the approved output depending on the review decision
   if (status.review_decision === REVIEW_DECISION.APPROVED) {
-    core.setOutput('approved', 'true')
+    coreApi.setOutput('approved', 'true')
   } else if (status.review_decision === null) {
-    core.info(
+    coreApi.info(
       '💡 PR has no approval requirements so it is technically considered approved'
     )
-    core.setOutput('approved', 'true')
+    coreApi.setOutput('approved', 'true')
   } else {
-    core.setOutput('approved', 'false')
+    coreApi.setOutput('approved', 'false')
   }
 
   // Set the evaluation output depending on the input criteria
   if (data.evaluations.length === 0) {
-    core.info('💡 No evaluation criteria provided')
-    core.setOutput('evaluation', EVALUATION_RESULT.PASS)
-    core.info(`📊 Evaluation result: PASS ✅`)
+    coreApi.info('💡 No evaluation criteria provided')
+    coreApi.setOutput('evaluation', EVALUATION_RESULT.PASS)
+    coreApi.info('📊 Evaluation result: PASS ✅')
     return true // Default to pass when no criteria
   }
 
-  core.info(
+  coreApi.info(
     `🔍 Evaluating ${data.evaluations.length} criteria: ${data.evaluations.join(', ')}`
   )
 
@@ -53,15 +66,16 @@ export function outputs(status, data) {
    * @returns {number} The minimum number of approvals required
    * @throws {Error} If the parsing fails or number is invalid
    */
-  function parseMinApprovals(evaluation) {
+  function parseMinApprovals(evaluation: string): number {
     const parts = evaluation.split('=')
     if (parts.length !== 2) {
       throw new Error(`Invalid min_approvals format: ${evaluation}`)
     }
 
-    const minApprovals = parseInt(parts[1], 10)
+    const value = parts[1]!
+    const minApprovals = parseInt(value, 10)
     if (isNaN(minApprovals) || minApprovals < 0) {
-      throw new Error(`Invalid min_approvals value: ${parts[1]}`)
+      throw new Error(`Invalid min_approvals value: ${value}`)
     }
 
     return minApprovals
@@ -73,37 +87,40 @@ export function outputs(status, data) {
    * @param {Object} status - The status object containing PR information
    * @returns {boolean} True if the evaluation passes, false otherwise
    */
-  function evaluateCriteria(evaluation, status) {
+  function evaluateCriteria(
+    evaluation: string,
+    statusResult: StatusResult
+  ): boolean {
     if (evaluation === EVALUATION_CRITERIA.APPROVED) {
       if (
-        status.review_decision !== REVIEW_DECISION.APPROVED &&
-        status.review_decision !== null
+        statusResult.review_decision !== REVIEW_DECISION.APPROVED &&
+        statusResult.review_decision !== null
       ) {
-        core.warning(
+        coreApi.warning(
           `⚠️ Evaluation '${evaluation}' failed - PR is not approved`
         )
         return false
       }
     } else if (evaluation === EVALUATION_CRITERIA.MERGEABLE) {
-      if (status.mergeable_state !== 'MERGEABLE') {
-        core.warning(
+      if (statusResult.mergeable_state !== 'MERGEABLE') {
+        coreApi.warning(
           `⚠️ Evaluation '${evaluation}' failed - PR is not in a mergeable state`
         )
         return false
       }
     } else if (evaluation === EVALUATION_CRITERIA.CI_PASSING) {
       if (
-        status.commit_status !== PR_STATUS.SUCCESS &&
-        status.commit_status !== null
+        statusResult.commit_status !== PR_STATUS.SUCCESS &&
+        statusResult.commit_status !== null
       ) {
-        core.warning(
+        coreApi.warning(
           `⚠️ Evaluation '${evaluation}' failed - commit status is not successful`
         )
         return false
       }
     } else if (evaluation === EVALUATION_CRITERIA.NOT_DRAFT) {
-      if (status.is_draft === true) {
-        core.warning(
+      if (statusResult.is_draft === true) {
+        coreApi.warning(
           `⚠️ Evaluation '${evaluation}' failed - PR is in draft status`
         )
         return false
@@ -111,18 +128,21 @@ export function outputs(status, data) {
     } else if (evaluation.includes(EVALUATION_CRITERIA.MIN_APPROVALS)) {
       try {
         const minApprovals = parseMinApprovals(evaluation)
-        if (status.total_approvals < minApprovals) {
-          core.warning(
-            `⚠️ Evaluation '${evaluation}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${minApprovals} approvals`
+        const totalApprovals = statusResult.total_approvals
+        if ((totalApprovals ?? 0) < minApprovals) {
+          coreApi.warning(
+            `⚠️ Evaluation '${evaluation}' failed - PR only has ${totalApprovals} approvals, but requires at least ${minApprovals} approvals`
           )
           return false
         }
-      } catch (error) {
-        core.warning(`⚠️ Evaluation '${evaluation}' failed - ${error.message}`)
+      } catch (error: unknown) {
+        coreApi.warning(
+          `⚠️ Evaluation '${evaluation}' failed - ${(error as Error).message}`
+        )
         return false
       }
     } else {
-      core.warning(
+      coreApi.warning(
         `⚠️ Evaluation '${evaluation}' failed - unknown evaluation criteria`
       )
       return false
@@ -139,7 +159,7 @@ export function outputs(status, data) {
     }
   })
 
-  core.setOutput(
+  coreApi.setOutput(
     'evaluation',
     pass ? EVALUATION_RESULT.PASS : EVALUATION_RESULT.FAIL
   )

@@ -1,5 +1,15 @@
 import * as core from '@actions/core'
 
+import type {
+  CoreDependencies,
+  IssueNumber,
+  LabelClient,
+  LabelResult,
+  RepositoryOnlyContext
+} from '../types.ts'
+
+const defaultDependencies: CoreDependencies = {core}
+
 /**
  * Add and remove labels from a pull request
  * @param {string} issueNumber - The issue number to add the labels to
@@ -10,30 +20,32 @@ import * as core from '@actions/core'
  * @returns {Object} An object containing the labels added and removed
  */
 export async function label(
-  issueNumber,
-  context,
-  octokit,
-  labelsToAdd,
-  labelsToRemove
-) {
+  issueNumber: IssueNumber,
+  context: RepositoryOnlyContext,
+  octokit: LabelClient,
+  labelsToAdd: string[],
+  labelsToRemove: string[],
+  dependencies: CoreDependencies = defaultDependencies
+): Promise<LabelResult> {
+  const coreApi = dependencies.core
   const {owner, repo} = context.repo
-  const addedLabels = [] // an array of labels that were actually added
-  const removedLabels = [] // an array of labels that were actually removed
+  const addedLabels: string[] = [] // an array of labels that were actually added
+  const removedLabels: string[] = [] // an array of labels that were actually removed
 
   // Exit early if there are no labels to add or remove
   if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
-    core.info('🏷️ No labels to add or remove')
+    coreApi.info('🏷️ No labels to add or remove')
     return {
       added: [],
       removed: []
     }
   }
 
-  core.info(`🏷️ Processing labels for PR #${issueNumber}`)
+  coreApi.info(`🏷️ Processing labels for PR #${issueNumber}`)
 
   // First, find and cleanup labelsToRemove if any are provided
   if (labelsToRemove.length > 0) {
-    core.debug('🔍 Fetching current labels on the issue')
+    coreApi.debug('🔍 Fetching current labels on the issue')
 
     try {
       const currentLabelsResult = await octokit.rest.issues.listLabelsOnIssue({
@@ -43,8 +55,8 @@ export async function label(
       })
       const currentLabels = currentLabelsResult.data.map(label => label.name)
 
-      core.debug(`📋 Current labels: ${currentLabels.join(', ')}`)
-      core.debug(`❌ Labels to remove: ${labelsToRemove.join(', ')}`)
+      coreApi.debug(`📋 Current labels: ${currentLabels.join(', ')}`)
+      coreApi.debug(`❌ Labels to remove: ${labelsToRemove.join(', ')}`)
 
       // Remove unwanted labels
       for (const label of labelsToRemove) {
@@ -55,20 +67,25 @@ export async function label(
             issue_number: issueNumber,
             name: label
           })
-          core.info(`🏷️ ❌ Label removed: ${label}`)
+          coreApi.info(`🏷️ ❌ Label removed: ${label}`)
           removedLabels.push(label)
         } else {
-          core.info(`🏷️ ⚠️ Label not found: '${label}' so it was not removed`)
+          coreApi.info(
+            `🏷️ ⚠️ Label not found: '${label}' so it was not removed`
+          )
         }
       }
-    } catch (error) {
-      core.warning(`⚠️ Failed to process label removal: ${error.message}`)
+    } catch (error: unknown) {
+      const labelError = error as Error
+      coreApi.warning(
+        `⚠️ Failed to process label removal: ${labelError.message}`
+      )
     }
   }
 
   // Now, add the labels if any are provided
   if (labelsToAdd.length > 0) {
-    core.debug(`🔍 Attempting to apply labels: ${labelsToAdd.join(', ')}`)
+    coreApi.debug(`🔍 Attempting to apply labels: ${labelsToAdd.join(', ')}`)
 
     try {
       await octokit.rest.issues.addLabels({
@@ -77,10 +94,11 @@ export async function label(
         issue_number: issueNumber,
         labels: labelsToAdd
       })
-      core.info(`🏷️ ✅ Labels added: ${labelsToAdd.join(', ')}`)
+      coreApi.info(`🏷️ ✅ Labels added: ${labelsToAdd.join(', ')}`)
       addedLabels.push(...labelsToAdd)
-    } catch (error) {
-      core.warning(`⚠️ Failed to add labels: ${error.message}`)
+    } catch (error: unknown) {
+      const labelError = error as Error
+      coreApi.warning(`⚠️ Failed to add labels: ${labelError.message}`)
     }
   }
 
