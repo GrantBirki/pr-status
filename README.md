@@ -131,7 +131,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: GrantBirki/pr-status@v3
+      - uses: GrantBirki/pr-status@vX.X.X # <-- replace with the latest version
         id: pr-status
         with:
           evaluations: approved,ci_passing # evaluate the given PR against the approved and ci_passing attributes
@@ -190,7 +190,7 @@ jobs:
     name: Evaluate pull request
     runs-on: ubuntu-latest
     steps:
-      - uses: GrantBirki/pr-status@v3
+      - uses: GrantBirki/pr-status@vX.X.X
         with:
           evaluations: approved,ci_passing
           workflow: Evaluate pull request
@@ -209,7 +209,7 @@ You can also manually exclude specific CI checks using the `exclude_checks` inpu
 
 ```yaml
 # Exclude specific checks by name
-- uses: GrantBirki/pr-status@v3
+- uses: GrantBirki/pr-status@vX.X.X
   with:
     evaluations: approved,ci_passing
     exclude_checks: lint,codecov,security-scan
@@ -217,7 +217,7 @@ You can also manually exclude specific CI checks using the `exclude_checks` inpu
 
 ```yaml
 # Exclude multiple additional checks
-- uses: GrantBirki/pr-status@v3
+- uses: GrantBirki/pr-status@vX.X.X
   with:
     evaluations: approved,ci_passing
     exclude_checks: my-custom-check,third-party-tool
