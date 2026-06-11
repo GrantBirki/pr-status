@@ -3,16 +3,22 @@
   "version": "0.0.0",
   "private": true,
   "description": "A GitHub Action that checks the status of a pull request",
-  "main": "lib/main.js",
+  "type": "module",
+  "main": "dist/index.js",
+  "packageManager": "npm@11.13.0",
+  "engines": {
+    "node": "24.16.0",
+    "npm": "11.13.0"
+  },
   "scripts": {
-    "format": "prettier --write '**/*.js'",
-    "format-check": "prettier --check '**/*.js'",
-    "lint": "eslint src/**/*.js",
-    "package": "ncc build src/main.js -o dist --source-map --license licenses.txt",
-    "test": "(JEST_TEST=true jest && make-coverage-badge --output-path ./badges/coverage.svg) || make-coverage-badge --output-path ./badges/coverage.svg",
-    "ci-test": "JEST_TEST=true jest",
-    "all": "npm run format && npm run lint && npm run package",
-    "bundle": "npm run format && npm run package"
+    "typecheck": "tsc --noEmit",
+    "lint": "npm run typecheck",
+    "package": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "coverage-badge": "node scripts/coverage-badge.ts",
+    "test": "npm run ci-test && npm run coverage-badge",
+    "ci-test": "node --test --test-concurrency=1 --experimental-test-coverage --test-coverage-include='src/**/*.ts' --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 test/*.test.ts test/functions/*.test.ts",
+    "all": "npm run typecheck && npm test && npm run package",
+    "bundle": "npm run package"
   },
   "repository": {
     "type": "git",
@@ -25,38 +31,13 @@
   "author": "Grant Birkinbine",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.11.1",
-    "@actions/github": "^6.0.0",
-    "@octokit/plugin-retry": "^6.0.1",
-    "dedent-js": "^1.0.1",
-    "nunjucks": "^3.2.4"
-  },
-  "jest": {
-    "coverageReporters": [
-      "json-summary",
-      "text",
-      "lcov"
-    ],
-    "collectCoverage": true,
-    "collectCoverageFrom": [
-      "./src/**"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "lines": 98,
-        "branches": 87,
-        "functions": 99
-      }
-    }
+    "@actions/core": "1.11.1",
+    "@actions/github": "6.0.1",
+    "@octokit/plugin-retry": "6.1.0"
   },
   "devDependencies": {
-    "@babel/plugin-transform-modules-commonjs": "^7.24.8",
-    "@types/node": "^24.6.1",
-    "@vercel/ncc": "^0.38.4",
-    "eslint": "^8.57.0",
-    "jest": "^30.2.0",
-    "js-yaml": "^4.1.1",
-    "make-coverage-badge": "^1.2.0",
-    "prettier": "^3.6.2"
+    "@types/node": "24.12.2",
+    "@vercel/ncc": "0.38.4",
+    "typescript": "6.0.3"
   }
 }

@@ -3,7 +3,6 @@
 [![test](https://github.com/GrantBirki/pr-status/actions/workflows/test.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/test.yml)
 [![package-check](https://github.com/GrantBirki/pr-status/actions/workflows/package-check.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/package-check.yml)
 [![lint](https://github.com/GrantBirki/pr-status/actions/workflows/lint.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/lint.yml)
-[![CodeQL](https://github.com/GrantBirki/pr-status/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/GrantBirki/pr-status/actions/workflows/codeql-analysis.yml)
 [![coverage](./badges/coverage.svg)](./badges/coverage.svg)
 
 A GitHub Action that checks the status of a pull request.
@@ -18,7 +17,7 @@ Depending on the inputs provided, this Action will check the "status" of a pull 
 | ----- | --------- | ------- | ----------- |
 | `github_token` | `true` | `${{ github.token }}` | The GitHub token used to create an authenticated client - Provided for you by default! |
 | `pr_number` | `true` | `${{ github.event.number }}` | The pull request number to check the status of |
-| `workflow` | `false` | `${{ github.workflow }}` | The name of the workflow that is running this action. This is used to set the name of the check run created by this action so that it can be excluded from checking itself - Provided for you by default! This value is self hydrating. |
+| `workflow` | `false` | `${{ github.workflow }}` | The name of the workflow that is running this action. It is automatically excluded from CI status evaluation so the action does not wait on itself. |
 | `checks` | `true` | `all` | Whether to only look for `required` ci checks or `all` ci checks on the pull request |
 | `evaluations` | `false` | `approved` | The attributes (comma separated list) to evaluate the pull request against when determining its status on a PASS/FAIL system. The default is just `approved` so a PR only needs proper approvals for this check to pass. This plays into the `evaluation` output. Full example: `approved,ci_passing,mergeable,min_approvals=2` - This full example would state that a PR must be considered approved, have passing CI, have at least two approvals, and be in a cleanly mergeable state to have the `evaluation` output be set to `PASS`. |
 | `pass_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation passes - Examples: `"ready-for-deployment,approved"` |
@@ -186,3 +185,43 @@ The action intelligently handles both types and uses the appropriate field for e
 2. **Use exact names**: Make sure your exclusion names match exactly what appears in GitHub's CI status
 3. **Test your exclusions**: Use debug mode to verify the correct checks are being excluded
 4. **Document exclusions**: Comment your workflow to explain why certain checks are excluded
+
+## Development 🛠️
+
+This project deliberately keeps its dependency and build surface small. The
+maintained source, tests, and Node-based repository helpers are TypeScript. The
+test suite uses Node's built-in test runner, assertions, mocks, and coverage
+instead of a third-party test framework.
+
+Use the exact toolchain declared by the repository:
+
+- Node.js `24.16.0`
+- npm `11.13.0`
+
+Install the exact locked dependencies without running package lifecycle scripts:
+
+```shell
+npm ci --ignore-scripts
+```
+
+The main development commands are:
+
+```shell
+npm run typecheck # strict TypeScript checking
+npm run test      # native tests, 100% coverage gates, and coverage badge
+npm run package   # rebuild the committed GitHub Action bundle
+npm run all       # type-check, test, and package
+```
+
+Coverage must remain at 100% for lines, branches, and functions. The checked-in
+coverage badge is generated only after those gates pass; the badge itself is not
+the source of truth.
+
+GitHub runs `dist/index.js`, not the TypeScript source. Changes to runtime code,
+build configuration, or runtime dependencies must include the corresponding
+`@vercel/ncc` output. The bundle, license file, and source map are public
+artifacts and must be reviewed before they are committed.
+
+Do not edit `dist/` by hand. The `test`, `lint`, and `package-check` workflows
+verify the TypeScript source, native tests, coverage, and reproducibility of the
+committed bundle on Ubuntu.

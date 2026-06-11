@@ -1,12 +1,69 @@
 import * as core from '@actions/core'
-import {CHECK_STATUS, PR_STATUS, CHECK_TYPES} from './constants'
+import {CHECK_STATUS, PR_STATUS, CHECK_TYPES} from './constants.ts'
+import type {
+  CoreApi,
+  CoreDependencies,
+  GraphqlClient,
+  IssueNumber,
+  RepositoryOnlyContext,
+  StatusResult
+} from '../types.ts'
+
+interface CheckNode {
+  isRequired?: boolean | null
+  conclusion?: string | null
+  status?: string | null
+  state?: string | null
+  name?: string | null
+  context?: string | null
+  [key: string]: unknown
+}
+
+interface StatusCheckRollup {
+  state?: string | null
+  contexts?: {
+    nodes?: CheckNode[]
+  } | null
+}
+
+interface PullRequestStatusQueryResult {
+  repository?: {
+    pullRequest?: {
+      reviewDecision?: string | null
+      mergeStateStatus?: string | null
+      mergeable?: string | null
+      isDraft?: boolean | null
+      reviews?: {
+        totalCount?: number | null
+      } | null
+      commits?: {
+        nodes?: Array<{
+          commit?: {
+            checkSuites?: {
+              totalCount?: number | null
+            } | null
+            statusCheckRollup?: StatusCheckRollup | null
+          } | null
+        }>
+      } | null
+    } | null
+  } | null
+}
+
+interface StatusData {
+  checks: string
+  excludeChecks?: string[]
+  workflow?: string | undefined
+}
+
+const defaultDependencies: CoreDependencies = {core}
 
 /**
  * Get the name of a check from either CheckRun or StatusContext node
  * @param {Object} check - The check object (CheckRun or StatusContext)
  * @returns {string} The check name
  */
-function getCheckName(check) {
+function getCheckName(check: CheckNode): string {
   return check.name || check.context || 'Unknown'
 }
 
@@ -15,7 +72,7 @@ function getCheckName(check) {
  * @param {Object} check - The check object (CheckRun or StatusContext)
  * @returns {string} The check status in uppercase
  */
-function getCheckStatus(check) {
+function getCheckStatus(check: CheckNode, coreApi: CoreApi): string {
   // For CheckRun, prioritize conclusion over status, then fallback to state
   // For StatusContext, use state
   const status = (
@@ -27,13 +84,15 @@ function getCheckStatus(check) {
 
   // Add debug logging to help troubleshoot cases where we get UNKNOWN
   if (status === 'UNKNOWN') {
-    core.debug(`⚠️ Check status is UNKNOWN for check: ${JSON.stringify(check)}`)
+    coreApi.debug(
+      `⚠️ Check status is UNKNOWN for check: ${JSON.stringify(check)}`
+    )
 
     // Try to provide more context about what fields are available
     const availableFields = Object.keys(check).filter(
       key => check[key] !== null && check[key] !== undefined
     )
-    core.debug(`Available fields: ${availableFields.join(', ')}`)
+    coreApi.debug(`Available fields: ${availableFields.join(', ')}`)
   }
 
   return status
@@ -44,30 +103,36 @@ function getCheckStatus(check) {
  * @param {string} status - The status to check
  * @returns {boolean} True if successful
  */
-function isSuccessfulStatus(status) {
-  return [
+function isSuccessfulStatus(status: string): boolean {
+  const successfulStatuses: readonly string[] = [
     CHECK_STATUS.SUCCESS,
     CHECK_STATUS.SKIPPED,
     CHECK_STATUS.NEUTRAL
-  ].includes(status)
+  ]
+
+  return successfulStatuses.includes(status)
 }
 
 /**
  * Log all available checks for debugging purposes
  * @param {Array} checks - Array of check objects
  */
-function logAllChecks(checks) {
+function logAllChecks(checks: CheckNode[], coreApi: CoreApi): void {
   if (checks.length === 0) {
-    core.info('📋 No CI checks found on this pull request')
+    coreApi.info('📋 No CI checks found on this pull request')
     return
   }
 
-  core.info(`📋 Found ${checks.length} total CI checks on this pull request`)
+  coreApi.info(
+    `📋 Found ${checks.length} total CI checks on this pull request`
+  )
   checks.forEach(check => {
     const checkName = getCheckName(check)
     const isRequired = check.isRequired ? '(required)' : '(optional)'
-    const checkStatus = getCheckStatus(check)
-    core.info(`  - check: ${checkName} ${isRequired} - state: ${checkStatus}`)
+    const checkStatus = getCheckStatus(check, coreApi)
+    coreApi.info(
+      `  - check: ${checkName} ${isRequired} - state: ${checkStatus}`
+    )
   })
 }
 
@@ -77,16 +142,15 @@ function logAllChecks(checks) {
  * @param {Array} excludePatterns - Array of patterns to exclude
  * @returns {Array} Filtered array of checks
  */
-function filterExcludedChecks(checks, excludePatterns) {
-  /* istanbul ignore next */
-  if (!excludePatterns || excludePatterns.length === 0) {
-    return checks
-  }
-
+function filterExcludedChecks(
+  checks: CheckNode[],
+  excludePatterns: string[],
+  coreApi: CoreApi
+): CheckNode[] {
   return checks.filter(check => {
     const checkName = getCheckName(check)
     if (checkName === 'Unknown') {
-      core.debug('⚠️ Check with unknown name found, including in evaluation')
+      coreApi.debug('⚠️ Check with unknown name found, including in evaluation')
       return true
     }
 
@@ -94,7 +158,7 @@ function filterExcludedChecks(checks, excludePatterns) {
       excludePattern => checkName === excludePattern
     )
     if (shouldExclude) {
-      core.info(`🚫 Excluding check from status evaluation: ${checkName}`)
+      coreApi.info(`🚫 Excluding check from status evaluation: ${checkName}`)
     }
     return !shouldExclude
   })
@@ -106,22 +170,26 @@ function filterExcludedChecks(checks, excludePatterns) {
  * @param {string} checkType - Type of checks ('required' or 'all')
  * @returns {boolean} True if any check is failing
  */
-function logCheckResults(checks, checkType = 'check') {
+function logCheckResults(
+  checks: CheckNode[],
+  checkType: string,
+  coreApi: CoreApi
+): boolean {
   let hasFailingCheck = false
 
   checks.forEach(check => {
     const checkName = getCheckName(check)
-    const checkStatus = getCheckStatus(check)
+    const checkStatus = getCheckStatus(check, coreApi)
     const isSuccessful = isSuccessfulStatus(checkStatus)
 
     if (isSuccessful) {
       const prefix =
         checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
-      core.info(`✅ ${prefix} '${checkName}': ${checkStatus}`)
+      coreApi.info(`✅ ${prefix} '${checkName}': ${checkStatus}`)
     } else {
       const prefix =
         checkType === CHECK_TYPES.REQUIRED ? 'Required check' : 'Check'
-      core.info(`❌ ${prefix} '${checkName}': ${checkStatus} (FAILING)`)
+      coreApi.info(`❌ ${prefix} '${checkName}': ${checkStatus} (FAILING)`)
       hasFailingCheck = true
     }
   })
@@ -134,9 +202,12 @@ function logCheckResults(checks, checkType = 'check') {
  * @param {Array} checks - Array of check objects
  * @returns {boolean} True if all checks are successful
  */
-function areAllChecksSuccessful(checks) {
+function areAllChecksSuccessful(
+  checks: CheckNode[],
+  coreApi: CoreApi
+): boolean {
   return checks.every(check => {
-    const status = getCheckStatus(check)
+    const status = getCheckStatus(check, coreApi)
     return isSuccessfulStatus(status)
   })
 }
@@ -147,19 +218,24 @@ function areAllChecksSuccessful(checks) {
  * @param {string} checkType - Type of checks ('required' or 'all')
  * @param {string} overallState - The overall state from GitHub (for 'all' mode)
  */
-function logOverallStatus(hasFailures, checkType, overallState = null) {
+function logOverallStatus(
+  hasFailures: boolean,
+  checkType: string,
+  overallState: string | null,
+  coreApi: CoreApi
+): void {
   const isRequired = checkType === CHECK_TYPES.REQUIRED
 
   if (hasFailures) {
     const statusMessage = isRequired
       ? '🔴 Overall required checks status: FAILURE (one or more required checks failed)'
       : `🔴 Overall CI status: ${overallState || 'FAILURE'} (one or more checks failed)`
-    core.info(statusMessage)
+    coreApi.info(statusMessage)
   } else {
     const statusMessage = isRequired
       ? '🟢 Overall required checks status: SUCCESS (all required checks passed)'
       : '🟢 Overall CI status: SUCCESS (all checks passed)'
-    core.info(statusMessage)
+    coreApi.info(statusMessage)
   }
 }
 
@@ -169,37 +245,49 @@ function logOverallStatus(hasFailures, checkType, overallState = null) {
  * @param {Array} checksToExclude - Array of check names to exclude
  * @returns {string} The commit status
  */
-function processRequiredChecks(result, checksToExclude) {
+function processRequiredChecks(
+  result: PullRequestStatusQueryResult,
+  checksToExclude: string[],
+  coreApi: CoreApi
+): string {
   const allChecks =
-    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-      .contexts.nodes
+    result.repository!.pullRequest!.commits!.nodes![0]!.commit!
+      .statusCheckRollup!.contexts!.nodes!
 
   // Log all available checks for debugging
-  logAllChecks(allChecks)
+  logAllChecks(allChecks, coreApi)
 
   // Filter to required checks only, then exclude specified checks
   const requiredChecks = allChecks.filter(x => x.isRequired)
-  const filteredChecks = filterExcludedChecks(requiredChecks, checksToExclude)
+  const filteredChecks = filterExcludedChecks(
+    requiredChecks,
+    checksToExclude,
+    coreApi
+  )
 
-  core.info(
+  coreApi.info(
     `🔍 Evaluating ${filteredChecks.length} required checks (after exclusions)`
   )
 
   if (filteredChecks.length === 0) {
-    core.info('💡 No required checks found after filtering')
+    coreApi.info('💡 No required checks found after filtering')
     return PR_STATUS.SUCCESS
   }
 
   // Log the status of each required check and check for failures
-  const hasFailingCheck = logCheckResults(filteredChecks, CHECK_TYPES.REQUIRED)
+  const hasFailingCheck = logCheckResults(
+    filteredChecks,
+    CHECK_TYPES.REQUIRED,
+    coreApi
+  )
 
   // Determine overall status
-  const commitStatus = areAllChecksSuccessful(filteredChecks)
+  const commitStatus = areAllChecksSuccessful(filteredChecks, coreApi)
     ? PR_STATUS.SUCCESS
     : PR_STATUS.FAILURE
 
   // Log overall status summary
-  logOverallStatus(hasFailingCheck, CHECK_TYPES.REQUIRED)
+  logOverallStatus(hasFailingCheck, CHECK_TYPES.REQUIRED, null, coreApi)
 
   return commitStatus
 }
@@ -210,39 +298,51 @@ function processRequiredChecks(result, checksToExclude) {
  * @param {Array} checksToExclude - Array of check names to exclude
  * @returns {string} The commit status
  */
-function processAllChecks(result, checksToExclude) {
+function processAllChecks(
+  result: PullRequestStatusQueryResult,
+  checksToExclude: string[],
+  coreApi: CoreApi
+): string | null {
   const allChecks =
-    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-      .contexts.nodes
+    result.repository!.pullRequest!.commits!.nodes![0]!.commit!
+      .statusCheckRollup!.contexts!.nodes!
 
   // Log all available checks for debugging
-  logAllChecks(allChecks)
+  logAllChecks(allChecks, coreApi)
 
   // Filter out excluded checks
-  const filteredChecks = filterExcludedChecks(allChecks, checksToExclude)
+  const filteredChecks = filterExcludedChecks(
+    allChecks,
+    checksToExclude,
+    coreApi
+  )
 
-  core.info(
+  coreApi.info(
     `🔍 Evaluating ${filteredChecks.length} total checks (after exclusions)`
   )
 
   // If no checks remain after filtering, return null
   if (filteredChecks.length === 0) {
-    core.info('💡 No CI checks found after filtering out excluded checks')
+    coreApi.info('💡 No CI checks found after filtering out excluded checks')
     return null
   }
 
   // Log the status of each check and check for failures
-  const hasFailingCheck = logCheckResults(filteredChecks, CHECK_TYPES.ALL)
+  const hasFailingCheck = logCheckResults(
+    filteredChecks,
+    CHECK_TYPES.ALL,
+    coreApi
+  )
 
   // Determine overall status
-  const allSuccessful = areAllChecksSuccessful(filteredChecks)
+  const allSuccessful = areAllChecksSuccessful(filteredChecks, coreApi)
   const rollupState =
-    result.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup
-      .state
+    result.repository!.pullRequest!.commits!.nodes![0]!.commit!
+      .statusCheckRollup!.state || null
   const commitStatus = allSuccessful ? PR_STATUS.SUCCESS : rollupState
 
   // Log overall status summary
-  logOverallStatus(hasFailingCheck, CHECK_TYPES.ALL, rollupState)
+  logOverallStatus(hasFailingCheck, CHECK_TYPES.ALL, rollupState, coreApi)
 
   return commitStatus
 }
@@ -297,11 +397,14 @@ const PR_STATUS_QUERY = `query($owner:String!, $name:String!, $number:Int!) {
  * @param {string} prNumber - Pull request number
  * @returns {Object} GraphQL query variables
  */
-function prepareQueryVariables(context, prNumber) {
+function prepareQueryVariables(
+  context: RepositoryOnlyContext,
+  prNumber: IssueNumber
+): Record<string, unknown> {
   return {
     owner: context.repo.owner,
     name: context.repo.repo,
-    number: parseInt(prNumber),
+    number: parseInt(String(prNumber)),
     headers: {
       Accept: 'application/vnd.github.merge-info-preview+json'
     }
@@ -313,16 +416,14 @@ function prepareQueryVariables(context, prNumber) {
  * @param {Object} data - Data object containing exclude checks and workflow info
  * @returns {Array} Array of check names to exclude
  */
-function prepareExcludeChecks(data) {
+function prepareExcludeChecks(data: StatusData, coreApi: CoreApi): string[] {
   const excludeChecks = data.excludeChecks || []
   const currentActionName = data.workflow || 'pr-status'
 
   const checksToExclude = [...excludeChecks, currentActionName].filter(Boolean)
-  if (checksToExclude.length > 0) {
-    core.info(
-      `🚫 Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
-    )
-  }
+  coreApi.info(
+    `🚫 Checks to exclude from status evaluation: ${checksToExclude.join(', ')}`
+  )
 
   return checksToExclude
 }
@@ -334,35 +435,42 @@ function prepareExcludeChecks(data) {
  * @param {Array} checksToExclude - Array of check names to exclude
  * @returns {string|null} Commit status or null
  */
-function determineCommitStatus(result, data, checksToExclude) {
+function determineCommitStatus(
+  result: PullRequestStatusQueryResult,
+  data: StatusData,
+  checksToExclude: string[],
+  coreApi: CoreApi
+): string | null {
   try {
     const checkSuites =
-      result.repository.pullRequest.commits.nodes[0].commit.checkSuites
+      result.repository!.pullRequest!.commits!.nodes![0]!.commit!.checkSuites!
 
     // If there are no CI checks defined at all, return null
     if (checkSuites.totalCount === 0) {
-      core.info('💡 No CI checks have been defined for this pull request')
+      coreApi.info('💡 No CI checks have been defined for this pull request')
       return null
     }
 
     // Process checks based on type
     if (data.checks === CHECK_TYPES.REQUIRED) {
-      return processRequiredChecks(result, checksToExclude)
+      return processRequiredChecks(result, checksToExclude, coreApi)
     } else {
-      return processAllChecks(result, checksToExclude)
+      return processAllChecks(result, checksToExclude, coreApi)
     }
-  } catch (error) {
-    core.warning(`⚠️ Could not retrieve PR commit status: ${error.message}`)
-    core.info('💡 This repo may not have any CI checks defined')
-    core.info('🔄 Skipping commit status check and proceeding...')
+  } catch (error: unknown) {
+    const statusError = error as Error
+    coreApi.warning(
+      `⚠️ Could not retrieve PR commit status: ${statusError.message}`
+    )
+    coreApi.info('💡 This repo may not have any CI checks defined')
+    coreApi.info('🔄 Skipping commit status check and proceeding...')
 
     // Try to display the raw GraphQL result for debugging purposes
     try {
-      core.debug('🔍 Raw GraphQL result for debugging:')
-      core.debug(JSON.stringify(result, null, 2))
-    } catch (debugError) {
-      /* istanbul ignore next */
-      core.debug('❌ Could not output raw GraphQL result for debugging')
+      coreApi.debug('🔍 Raw GraphQL result for debugging:')
+      coreApi.debug(JSON.stringify(result, null, 2) as string)
+    } catch {
+      coreApi.debug('❌ Could not output raw GraphQL result for debugging')
     }
 
     return null
@@ -375,8 +483,12 @@ function determineCommitStatus(result, data, checksToExclude) {
  * @param {string|null} commitStatus - Determined commit status
  * @returns {Object} Status result object
  */
-function extractStatusResult(result, commitStatus) {
-  const statusResult = {
+function extractStatusResult(
+  result: PullRequestStatusQueryResult,
+  commitStatus: string | null,
+  coreApi: CoreApi
+): StatusResult {
+  const statusResult: StatusResult = {
     review_decision: result?.repository?.pullRequest?.reviewDecision || null,
     total_approvals:
       result?.repository?.pullRequest?.reviews?.totalCount || null,
@@ -387,11 +499,11 @@ function extractStatusResult(result, commitStatus) {
     commit_status: commitStatus || null
   }
 
-  core.info(`📊 Merge State Status: ${statusResult.merge_state_status}`)
-  core.info(`📊 Mergeable State: ${statusResult.mergeable_state}`)
-  core.info(`📊 Is Draft: ${statusResult.is_draft}`)
+  coreApi.info(`📊 Merge State Status: ${statusResult.merge_state_status}`)
+  coreApi.info(`📊 Mergeable State: ${statusResult.mergeable_state}`)
+  coreApi.info(`📊 Is Draft: ${statusResult.is_draft}`)
 
-  core.debug(`📊 Status result: ${JSON.stringify(statusResult, null, 2)}`)
+  coreApi.debug(`📊 Status result: ${JSON.stringify(statusResult, null, 2)}`)
   return statusResult
 }
 
@@ -403,25 +515,42 @@ function extractStatusResult(result, commitStatus) {
  * @param {Object} data - An object containing the checks parameter and other data
  * @returns {Object} An object containing the review_decision, merge_state_status, and commit_status
  */
-export async function status(octokit, context, prNumber, data) {
+export async function status(
+  octokit: GraphqlClient,
+  context: RepositoryOnlyContext,
+  prNumber: IssueNumber,
+  data: StatusData,
+  dependencies: CoreDependencies = defaultDependencies
+): Promise<StatusResult> {
+  const coreApi = dependencies.core
+
   try {
-    core.info('🔍 Fetching pull request status information...')
+    coreApi.info('🔍 Fetching pull request status information...')
 
     // Prepare query variables and exclusions
     const variables = prepareQueryVariables(context, prNumber)
-    const checksToExclude = prepareExcludeChecks(data)
+    const checksToExclude = prepareExcludeChecks(data, coreApi)
 
     // Make the GraphQL query
-    const result = await octokit.graphql(PR_STATUS_QUERY, variables)
+    const result = (await octokit.graphql(
+      PR_STATUS_QUERY,
+      variables
+    )) as PullRequestStatusQueryResult
 
     // Determine commit status
-    const commitStatus = determineCommitStatus(result, data, checksToExclude)
+    const commitStatus = determineCommitStatus(
+      result,
+      data,
+      checksToExclude,
+      coreApi
+    )
 
     // Extract and return the status result
-    return extractStatusResult(result, commitStatus)
-  } catch (error) {
-    core.error(`❌ Failed to fetch PR status: ${error.message}`)
-    core.debug(`🔍 Error details: ${error.stack}`)
+    return extractStatusResult(result, commitStatus, coreApi)
+  } catch (error: unknown) {
+    const statusError = error as Error
+    coreApi.error(`❌ Failed to fetch PR status: ${statusError.message}`)
+    coreApi.debug(`🔍 Error details: ${statusError.stack}`)
     throw error
   }
 }

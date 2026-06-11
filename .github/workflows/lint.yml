@@ -23,9 +23,7 @@ jobs:
           cache: 'npm'
 
       - name: install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
-      - name: lint
-        run: |
-          npm run format-check
-          npm run lint
+      - name: typecheck
+        run: npm run typecheck

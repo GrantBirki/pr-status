@@ -1,4 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="105" height="20" role="img" aria-label="coverage: 100%">
+import {mkdirSync, writeFileSync} from 'node:fs'
+import {dirname, join, resolve} from 'node:path'
+import {pathToFileURL} from 'node:url'
+
+export const COVERAGE_BADGE = `<svg xmlns="http://www.w3.org/2000/svg" width="105" height="20" role="img" aria-label="coverage: 100%">
   <title>coverage: 100%</title>
   <linearGradient id="s" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
@@ -19,3 +23,19 @@
     <text x="840" y="140" transform="scale(.1)" textLength="320">100%</text>
   </g>
 </svg>
+`
+
+export function writeCoverageBadge(rootDirectory = process.cwd()): string {
+  const outputPath = join(rootDirectory, 'badges', 'coverage.svg')
+  mkdirSync(dirname(outputPath), {recursive: true})
+  writeFileSync(outputPath, COVERAGE_BADGE)
+  return outputPath
+}
+
+const invokedPath = process.argv[1]
+if (
+  invokedPath &&
+  import.meta.url === pathToFileURL(resolve(invokedPath)).href
+) {
+  writeCoverageBadge()
+}

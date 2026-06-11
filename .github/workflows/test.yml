@@ -22,8 +22,24 @@ jobs:
           node-version-file: .node-version
           cache: 'npm'
 
+      - name: verify toolchain and package age policy
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = 'v24.16.0'
+          test "$(npm --version)" = '11.13.0'
+          node --input-type=module -e "import {execFileSync} from 'node:child_process'; const before = Date.parse(execFileSync('npm', ['config', 'get', 'before'], {encoding: 'utf8'}).trim()); const ageDays = (Date.now() - before) / 86_400_000; if (!Number.isFinite(before) || ageDays < 44.9 || ageDays > 45.1) throw new Error('npm did not apply min-release-age=45')"
+
       - name: install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: test
-        run: npm run ci-test
+        run: npm test
+
+      - name: verify coverage badge is current
+        run: |
+          if [ -n "$(git status --porcelain -- badges/coverage.svg)" ]; then
+            echo "The coverage badge is not current. Run npm test and commit the result."
+            git status --short -- badges/coverage.svg
+            git diff -- badges/coverage.svg
+            exit 1
+          fi
