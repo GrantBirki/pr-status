@@ -10,8 +10,8 @@ inputs:
     default: ${{ github.token }}
     required: true
   workflow:
-    description: The name of the workflow that is running this action - used to exclude the current action from the checks
-    default: ${{ github.workflow }}
+    description: The exact, case-sensitive current job/check name to exclude so this action does not evaluate itself
+    default: ${{ github.job }}
     required: false
   pr_number:
     description: A positive integer identifying the pull request to evaluate
@@ -49,9 +49,9 @@ outputs:
   review_decision:
     description: 'The pull request review decision, such as APPROVED, CHANGES_REQUESTED, or REVIEW_REQUIRED; empty when GitHub returns null'
   merge_state_status:
-    description: 'The status of the pull request merge state - Examples: "CLEAN", "DIRTY", "UNKNOWN", "DRAFT", "BLOCKED", etc'
+    description: 'The pull request merge state status: CLEAN, DIRTY, BLOCKED, BEHIND, UNSTABLE, HAS_HOOKS, or UNKNOWN'
   mergeable_state:
-    description: 'The mergeable state of the pull request - Examples: "MERGEABLE", "UNSTABLE", "CONFLICTING", "UNKNOWN", etc'
+    description: 'The pull request mergeable state: MERGEABLE, CONFLICTING, or UNKNOWN'
   commit_status:
     description: 'The normalized CI status for the latest commit: SUCCESS, FAILURE, PENDING, or UNKNOWN'
   is_draft:

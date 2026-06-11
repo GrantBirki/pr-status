@@ -7,7 +7,7 @@ export interface RepositoryContext {
 
 export interface ActionContext {
   repo: RepositoryContext
-  workflow: string
+  job: string
   issueNumber: number | undefined
 }
 
@@ -83,7 +83,7 @@ export function loadActionContext(
   }
 
   const eventPath = requiredEnvironmentValue(environment, 'GITHUB_EVENT_PATH')
-  const workflow = requiredEnvironmentValue(environment, 'GITHUB_WORKFLOW')
+  const job = requiredEnvironmentValue(environment, 'GITHUB_JOB')
   const payload = parseEventPayload(dependencies.readFile(eventPath))
   const issueNumber =
     nestedIssueNumber(payload, 'pull_request') ??
@@ -95,7 +95,7 @@ export function loadActionContext(
       owner,
       repo
     },
-    workflow,
+    job,
     issueNumber
   }
 }

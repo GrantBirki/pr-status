@@ -3,78 +3,26 @@
 This repository contains `pr-status`, a public GitHub Action that evaluates the
 state of a pull request, publishes action outputs, and optionally manages pull
 request labels. Treat every source change, generated bundle, workflow edit,
-commit message, branch name, and pull request as potentially visible to the
-entire internet.
+commit message, branch name, tag, release, and pull request as potentially
+visible to the entire internet.
 
-The approved direction is a small, strongly typed, auditable action delivered
-through two sequential pull requests:
+The current implementation is deliberately small, strongly typed, and
+auditable:
 
-- All maintained source and test code should be TypeScript.
-- Runtime behavior should use Node.js built-ins wherever practical.
-- The shipped action should have no third-party runtime dependencies if the
-  required behavior can be implemented clearly with Node.js and GitHub's
-  documented protocols.
-- Development dependencies should be kept to the smallest defensible set.
-- Unit tests must enforce 100% line, branch, and function coverage.
-- The committed `dist/` bundle must be reproducible from reviewed source.
-- Dependency and toolchain changes must be slow, explicit, and reviewable.
+- Maintained runtime, test, and Node-based repository helper code is TypeScript.
+- Runtime behavior uses Node.js built-ins and narrowly scoped local adapters.
+- The shipped action has zero third-party production dependencies.
+- Development dependencies are limited to the exact-pinned TypeScript compiler,
+  Node type declarations, and `@vercel/ncc` bundler.
+- Tests use Node's standard library and enforce 100% line, branch, and function
+  coverage.
+- The committed `dist/` bundle and source map are reproducible from reviewed
+  source.
+- Dependency and toolchain changes are slow, explicit, and reviewable.
 
-These goals do not justify a large framework or speculative abstraction. The
+These properties do not justify a framework or speculative abstraction. The
 preferred implementation is the minimum amount of clear code that preserves the
-public action contract.
-
-## Approved Migration Sequence
-
-The redesign is intentionally split into two reviewable changes. Do not combine
-the stages or begin the second stage from an unmerged first-stage branch.
-
-### PR 1: TypeScript Foundation
-
-Create `codex/typescript-foundation` from current `main`. This stage must:
-
-- Convert maintained runtime code, tests, and Node-based repository helpers to
-  strict TypeScript and ESM.
-- Replace Jest, Babel, ESLint, Prettier, and third-party coverage/badge tooling
-  with the TypeScript compiler and Node's native test, assertion, mock, and
-  coverage facilities.
-- Enforce real 100% line, branch, and function coverage over every maintained
-  source file.
-- Remove unused dependencies and exact-pin every dependency that remains.
-- Add a read-only `uses: ./` acceptance workflow and strengthen bundle
-  reproduction checks.
-- Keep `@actions/core`, `@actions/github`, and `@octokit/plugin-retry`
-  temporarily.
-- Preserve the current runtime evaluation, output, and label semantics. The
-  only intended runtime safety change is that tokens and raw input structures
-  must never be logged. Broken test, coverage, build, and release gates may and
-  should be repaired.
-- Keep `@vercel/ncc`, committed source maps, and the generated `dist/` bundle.
-
-Open PR 1 as a draft. PR 2 must not start until PR 1 is merged, the updated
-`main` branch is green, and the next branch starts from that updated `main`.
-
-### PR 2: Native Runtime Redesign
-
-Create `codex/native-runtime-redesign` from the post-PR-1 `main`. This stage
-must:
-
-- Replace the used subset of `@actions/core` with a small adapter over the
-  documented GitHub Actions environment-file and workflow-command protocols.
-- Replace the used subset of `@actions/github` and the Octokit retry plugin with
-  a narrowly scoped client built on Node's native `fetch`.
-- Support GitHub.com only. Reject GitHub Enterprise Server API endpoints
-  clearly rather than silently attempting partial compatibility.
-- Keep execution GitHub Actions-only. Do not add a local CLI, best-effort local
-  execution, legacy `set-output` fallback, or proxy-support claim.
-- Introduce the separately approved strict input validation, paginated status
-  and review retrieval, unique current non-bot approval counting, four-state
-  commit status, fail-closed CI evaluation, and strict label reconciliation.
-- Reach zero production dependencies while retaining exact-pinned
-  `typescript`, `@types/node`, and `@vercel/ncc` as development dependencies.
-
-User-visible PR 2 behavior must be documented in `action.yml`, `README.md`,
-tests, and the generated bundle together. Do not describe PR 2 semantics as
-current behavior in PR 1 documentation.
+public action contract and its security boundaries.
 
 ## Think Before Coding
 
@@ -92,12 +40,12 @@ Before changing code:
 6. Stop and ask when ambiguity could alter the public contract, release
    behavior, permissions, failure semantics, or dependency policy.
 
-Do not add features, extensibility, configuration, error handling, or abstraction
-that the request does not require. A one-use helper does not need a framework.
-Plain functions and explicit interfaces are preferred over class hierarchies.
-Apply SOLID, GRASP, DRY, and object-oriented ideas only when they make this small
-action easier to understand or test; do not create indirection merely to satisfy
-a named principle.
+Do not add features, extensibility, configuration, error handling, or
+abstraction that the request does not require. A one-use helper does not need a
+framework. Plain functions and explicit interfaces are preferred over class
+hierarchies. Apply named design principles only when they make this small action
+easier to understand or test; do not create indirection merely to satisfy a
+pattern.
 
 ## Public Repository Safety
 
@@ -105,7 +53,7 @@ Assume the repository is public even if local or remote metadata temporarily
 says otherwise.
 
 Never add any of the following to source, tests, fixtures, documentation,
-generated files, logs, Git metadata, or pull request text:
+generated files, logs, Git metadata, pull request text, tags, or releases:
 
 - Credentials, tokens, keys, cookies, or authentication material.
 - Private URLs, hostnames, repository names, project names, incident details,
@@ -125,57 +73,81 @@ Before any commit, push, tag, release, or pull request:
 3. Review the staged diff separately from the working-tree diff.
 4. Review every commit that would be published, not only the final tree.
 5. Review author and committer identities, the branch name, commit messages, tag
-   names, PR title, and PR body.
+   names, PR title, PR body, and release notes.
 6. Search for secrets and non-public names, domains, URLs, and identifiers.
 7. Remove questionable material or ask the maintainer before publishing.
 
-Do not commit, push, tag, publish, or open/update a pull request unless the user
-explicitly asks for that action.
+Do not commit, push, tag, publish, or open or update a pull request unless the
+user explicitly asks for that action.
 
-## Repository Map
+## Current Architecture
 
-Read the live tree before changing anything. During the two-PR migration, a
-checkout may contain the pre-migration JavaScript layout, the PR 1 TypeScript
-layout, or the PR 2 native runtime layout.
+Read the live tree before changing anything. The repository has one supported
+architecture: a strict TypeScript source tree, Node-native runtime adapters,
+Node-native tests, and a committed `ncc` bundle.
 
 - `action.yml` is the public action metadata and contract. It declares inputs,
   outputs, the Node runtime, and `dist/index.js` as the executable entrypoint.
-- `src/index.ts` is the minimal executable entrypoint. `src/main.ts` contains
-  side-effect-free orchestration, and `src/functions/` contains focused domain
-  logic. After PR 1 all are strict TypeScript; after PR 2 `src/` also contains
-  the narrow Actions protocol and GitHub HTTP adapters.
+- `src/index.ts` is the minimal executable entrypoint.
+- `src/main.ts` contains orchestration and dependency wiring.
+- `src/functions/` contains focused status, evaluation, label, and parsing
+  logic.
+- `src/actions.ts` implements the narrow GitHub Actions environment-file and
+  workflow-command protocol surface used by this action.
+- `src/context.ts` validates GitHub Actions context and event payload data.
+- `src/github.ts` implements the narrow GitHub.com GraphQL and REST client over
+  Node's native `fetch`.
+- `src/version.ts` is the source of truth for the action version used by the
+  native GitHub client's user agent and the release helper.
 - `test/` contains native TypeScript tests using `node:test` and
   `node:assert/strict`.
 - Repository TypeScript helpers generate deterministic artifacts such as
   `badges/coverage.svg` without third-party utility packages.
 - `dist/` is generated by `@vercel/ncc` and committed because GitHub executes
   JavaScript actions from the checked-in bundle. Never edit it by hand.
-- `.github/workflows/` contains Ubuntu-only test, type-check, bundle
-  verification, acceptance, and tag-maintenance workflows.
-- `script/release` creates and pushes a version tag. Never run it unless the
-  user explicitly requests a release operation.
+- `.github/workflows/` contains Ubuntu-only tests, type checking, bundle
+  verification, read-only acceptance, and major-tag maintenance.
+- `script/release` validates the release state, creates one annotated immutable
+  version tag, and pushes only that intended tag. Never run it without explicit
+  release authorization.
 - Root `AGENTS.md` is the authoritative coding-agent instruction file.
+
+Do not reintroduce a JavaScript source tree, a test-framework compatibility
+layer, or toolkit packages that duplicate the current local adapters.
 
 ## Public Action Contract
 
 Behavior declared in `action.yml` and documented in `README.md` is a public API.
 Do not rename inputs or outputs, change defaults, alter string values, change
-permission requirements, or change failure behavior as an incidental part of a
-TypeScript or dependency migration.
+permission requirements, or change failure behavior as incidental cleanup.
 
 Current inputs:
 
 - `github_token`: token used for GitHub API requests. It must never be logged.
-- `workflow`: current workflow name, used to exclude this action from its own CI
-  evaluation.
+- `workflow`: exact, case-sensitive current job/check name to exclude from CI
+  evaluation. Its metadata default is `${{ github.job }}`.
 - `pr_number`: pull request number, with event-context fallback behavior.
 - `checks`: selects `required` checks or all checks.
 - `evaluations`: comma-separated evaluation criteria.
 - `pass_labels`: labels added when evaluation passes.
 - `pass_labels_cleanup`: labels removed when evaluation passes.
 - `fail_labels`: labels added when evaluation fails.
-- `exclude_checks`: exact, case-sensitive check names excluded from CI status
-  evaluation.
+- `exclude_checks`: additional exact, case-sensitive check names excluded from
+  CI status evaluation.
+
+The `workflow` name is preserved for API compatibility, but its value is a job
+or check name, not the top-level workflow display name. The default
+`${{ github.job }}` normally matches when a job has no custom display name.
+Callers must explicitly pass the exact check name GitHub reports when using:
+
+- A custom `jobs.<job_id>.name` value.
+- A matrix job whose displayed name includes rendered matrix values.
+- A reusable workflow whose check name includes caller or called-job context.
+
+Matching is trimmed, exact, and case-sensitive. Do not add prefix matching,
+fuzzy matching, run-wide exclusion, check discovery, or extra API permissions
+without a separately reviewed public-contract change. `exclude_checks` remains
+the mechanism for excluding other checks.
 
 Current outputs:
 
@@ -204,34 +176,36 @@ of the following together:
 3. Focused unit tests
 4. Acceptance tests where applicable
 5. `README.md` tables, semantics, permissions, and examples
-6. The generated `dist/` bundle
+6. The generated `dist/` bundle and source map
 
 ## Execution Flow
 
 Preserve the observable flow unless a requested behavior change explicitly says
 otherwise:
 
-1. Read and validate action inputs.
+1. Read and validate action inputs and GitHub Actions context.
 2. Resolve repository and pull request context from documented GitHub Actions
    environment variables and event payload data.
-3. Query pull request review, merge, draft, and check status data.
-4. Exclude the current workflow and explicitly configured check names.
-5. Compute the status result.
-6. Set all documented outputs.
-7. Evaluate the requested criteria to PASS or FAIL.
-8. Determine labels to add and remove.
-9. Apply label changes.
-10. Mark unexpected action failures through the GitHub Actions command protocol.
+3. Resolve the exact current job/check name from a nonempty explicit `workflow`
+   input or the required `GITHUB_JOB` context fallback.
+4. Validate configuration before making an API request.
+5. Query pull request review, merge, draft, and check status data.
+6. Exclude the exact current job/check name and explicitly configured check
+   names.
+7. Compute the four-state commit status.
+8. Set all documented status and evaluation outputs.
+9. Evaluate the requested criteria to `PASS` or `FAIL`.
+10. Determine labels to add and remove.
+11. Apply label removals, then additions.
+12. Mark unexpected input, API, protocol, or label errors through the GitHub
+    Actions command protocol.
 
-The current implementation contains several fail-open and error-swallowing
-behaviors. Do not accidentally tighten or loosen them during a mechanical
-migration. Characterize them with tests, then discuss any intentional behavior
-change separately.
+A legitimate negative pull request state produces `evaluation=FAIL` without
+failing the action step. Configuration, context, API, protocol, response-shape,
+and requested label-mutation errors fail the action step. Preserve this
+distinction explicitly in source, tests, metadata, and documentation.
 
-## PR 2 Target Contract
-
-The following rules are approved for PR 2 only. They are intentional public
-behavior changes, not cleanup to mix into PR 1.
+## Runtime Evaluation Contract
 
 Validate configuration before making an API request:
 
@@ -243,14 +217,16 @@ Validate configuration before making an API request:
 - `min_approvals=0` is valid and always satisfies that criterion.
 - Unknown or malformed criteria fail the action as configuration errors.
 - An explicitly empty evaluation list remains valid and evaluates to `PASS`.
-- Check exclusions remain exact and case-sensitive, and the current workflow is
-  automatically excluded.
+- Check exclusions are trimmed, exact, and case-sensitive.
+- The current exact job/check name is added to the exclusion set.
+- A missing required GitHub Actions context value, including `GITHUB_JOB`, is a
+  protocol error rather than an invitation to guess or run locally.
 
-Approval counting must use paginated `latestReviews`, count at most one latest
-`APPROVED` review per actor login, and exclude GraphQL actors whose
+Approval counting uses paginated `latestReviews`, counts at most one latest
+`APPROVED` review per actor login, and excludes GraphQL actors whose
 `__typename` is `Bot`. `total_approvals` and `min_approvals` use this unique
-current non-bot count. Preserve the approved policy that a null
-`reviewDecision` satisfies the `approved` criterion.
+current non-bot count. Preserve the policy that a null `reviewDecision`
+satisfies the `approved` criterion.
 
 Normalize selected CI check states into exactly four outputs:
 
@@ -267,24 +243,24 @@ Having no selected checks produces `UNKNOWN`. `ci_passing` passes only for
 API data fails the action rather than being converted to an evaluation result.
 
 All requested evaluation criteria are ANDed. A legitimate negative PR state
-sets `evaluation=FAIL` but does not fail the action step. Input, API, protocol,
-and requested label-mutation errors do fail the action step.
+sets `evaluation=FAIL` but does not fail the action step. Input, context, API,
+protocol, and requested label-mutation errors do fail the action step.
 
 For labels, trim and deduplicate configured names while preserving order. On
 PASS, add `pass_labels` and remove `fail_labels` plus
 `pass_labels_cleanup`. On FAIL, add `fail_labels` and remove `pass_labels`. If a
 label is selected for both addition and removal, addition wins. Paginate current
 labels, skip deletion for labels already absent, remove first, then bulk-add.
-Set diagnostic status/evaluation outputs before reconciling labels, but fail the
-step when any requested mutation still fails after bounded retries.
+Set diagnostic status and evaluation outputs before reconciling labels, but fail
+the step when any requested mutation still fails after bounded retries.
 
-## TypeScript Direction
+## TypeScript and Toolchain Contract
 
-All maintained runtime, test, and repository helper code should move to
-TypeScript unless a file must remain another language for a documented reason.
+All maintained runtime, test, and repository helper code is TypeScript unless a
+file must remain another language for a documented reason.
 
-The approved PR 1 toolchain is exact and must stay aligned across
-`.node-version`, `package.json`, the lockfile, CI, and contributor docs:
+The exact toolchain must stay aligned across `.node-version`, `package.json`,
+the lockfile, CI, and contributor documentation:
 
 - Node.js `24.16.0`
 - npm `11.13.0`
@@ -292,12 +268,11 @@ The approved PR 1 toolchain is exact and must stay aligned across
 - `@types/node` `24.12.2`
 - `@vercel/ncc` `0.38.4`
 
-Use `"packageManager": "npm@11.13.0"` and exact Node/npm engine values. Keep
-`.npmrc`'s `min-release-age=45` setting and verify it with npm 11.13.0 rather
-than assuming another npm release interprets it the same way.
+Use `"packageManager": "npm@11.13.0"` and exact Node and npm engine values.
+Keep `.npmrc`'s `min-release-age=45` setting and verify it with the pinned npm
+release rather than assuming another npm release interprets it the same way.
 
-Use strict compiler settings. At minimum, keep these properties enabled where
-supported by the selected TypeScript version:
+Keep the strict compiler configuration, including:
 
 - `strict`
 - `noUncheckedIndexedAccess`
@@ -327,6 +302,8 @@ Prefer:
 - Small pure functions for parsing and evaluation logic.
 - Dependency injection at the orchestration boundary so tests do not need
   module-level monkey-patching.
+- Explicit `.ts` relative imports that Node can execute through native type
+  stripping.
 
 Avoid:
 
@@ -338,17 +315,25 @@ Avoid:
 - Classes for stateless helpers.
 - Duplicated interfaces that can be represented by one focused shared type.
 - Import-time side effects in modules that unit tests need to import.
+- Excluding tests or repository TypeScript helpers from strict type checking.
 
 TypeScript compilation and test execution are separate concerns. Node can strip
 types but does not type-check. A successful test run never replaces
 `tsc --noEmit`.
 
-Do not enable `skipLibCheck` merely to make a migration easier. It requires a
+Do not enable `skipLibCheck` merely to make a change easier. It requires a
 documented upstream declaration problem and explicit review.
 
 ## Dependency Policy
 
-The dependency budget is intentionally strict.
+The shipped action has zero production dependencies. Preserve that posture
+unless the user explicitly approves a well-supported exception.
+
+The only development dependencies are exact-pinned:
+
+- `typescript@6.0.3` for real type checking.
+- `@types/node@24.12.2` for the Node 24 toolchain.
+- `@vercel/ncc@0.38.4` for the committed GitHub Action bundle and source map.
 
 Do not add or install dependencies without the user's explicit consent. If
 consent is given:
@@ -362,51 +347,29 @@ consent is given:
 - Treat every upgrade as a new dependency review.
 
 Use `npm ci --ignore-scripts`, not `npm install`, for a lockfile-respecting
-bootstrap after the user has approved dependency installation. Never run
-automated dependency-fixing commands such as `npm audit fix` that rewrite the
-graph without review.
+bootstrap after dependency installation has been approved. Never run automated
+dependency-fixing commands such as `npm audit fix` that rewrite the graph
+without review.
 
-Target dependency posture:
+Do not reintroduce:
 
-- During PR 1, exact-pin the temporary runtime packages to
-  `@actions/core@1.11.1`, `@actions/github@6.0.1`, and
-  `@octokit/plugin-retry@6.1.0`.
-- Keep exact-pinned `@vercel/ncc@0.38.4` to produce the committed GitHub Action
-  bundle and source map through both approved PRs.
-- Keep exact-pinned `typescript@6.0.3` for real type-checking.
-- Keep exact-pinned `@types/node@24.12.2` for the Node 24 toolchain.
-- Remove Jest and Babel in favor of Node's built-in test runner and native
-  TypeScript execution.
-- Remove Prettier. Consistent formatting does not justify its dependency graph
-  here.
-- Remove ESLint if strict TypeScript checks and focused review cover the rules
-  this repository actually needs. Do not replace it with another broad lint
-  stack without an explicit requirement.
-- Remove `make-coverage-badge`; generate the deterministic SVG locally with
-  Node's standard library after the 100% coverage gate passes.
-- Remove `js-yaml` unless a concrete runtime requirement for YAML parsing is
-  introduced. `action.yml` does not need to be parsed by the action itself.
-- Remove unused template or utility packages rather than preserving them for
-  hypothetical future use.
-- Replace the used subset of `@actions/core` with a small, well-tested local
-  adapter over documented `INPUT_*` variables, workflow commands, and
-  `GITHUB_OUTPUT`.
-- In PR 2, replace the used subset of `@actions/github` and Octokit retry
-  plugins with a small, injected, GitHub.com-only client built on Node's native
-  `fetch`, with bounded error reporting, retries, pagination, and API response
-  validation explicitly tested.
+- `@actions/core`, `@actions/github`, Octokit, or a general-purpose HTTP client.
+- Jest, Babel, or a test-framework compatibility layer.
+- ESLint, Prettier, or another broad formatting or lint stack without a concrete
+  requirement that strict TypeScript and focused review cannot meet.
+- A YAML parser solely to inspect `action.yml`.
+- Coverage, badge, templating, or utility packages for behavior that the current
+  small Node-native helpers already provide.
 
-After PR 2, the shipped runtime dependency count must be zero and the only
-development dependencies are the three exact versions listed above. Do not
-sacrifice type-checking or the required `ncc` action bundle merely to claim a
-lower development dependency count.
+Do not sacrifice type checking or the required `ncc` action bundle merely to
+claim a lower development dependency count.
 
 ## Native GitHub Actions Adapter
 
-A local replacement for `@actions/core` should implement only what this action
-uses. Do not clone the entire toolkit.
+The local Actions adapter implements only what this action uses. Do not grow it
+into a clone of the GitHub Actions toolkit.
 
-Expected surface:
+Current surface:
 
 - `getInput`
 - `debug`
@@ -421,28 +384,28 @@ Required behavior:
 - Input names map to uppercased `INPUT_<NAME>` environment variables with
   spaces normalized to underscores.
 - Required inputs reject missing or empty values.
-- Inputs preserve the toolkit's trimming behavior unless explicitly disabled.
+- Inputs preserve the documented trimming behavior unless explicitly disabled.
 - Workflow command messages escape `%`, carriage return, and newline.
 - Workflow command properties additionally escape `:`, `,`, and other required
   separators.
 - Outputs use the `GITHUB_OUTPUT` environment file and a collision-resistant
   UUID multiline delimiter.
-- Output conversion preserves the toolkit behavior used by this action: nullish
-  values become an empty string, strings remain unchanged, and supported
-  non-string values are serialized deterministically.
-- Missing `GITHUB_OUTPUT` is an unsupported/non-GitHub execution environment
-  and must fail clearly. Do not implement legacy `set-output` fallback.
-- `setFailed` emits an error and sets a non-zero process exit code.
-- Tokens and other sensitive inputs are never included in debug output.
+- Nullish output values become an empty string, strings remain unchanged, and
+  supported non-string values are serialized deterministically.
+- Missing `GITHUB_OUTPUT` is an unsupported, non-GitHub execution environment
+  and fails clearly. Do not implement a legacy `set-output` fallback.
+- `setFailed` emits a bounded error and sets a non-zero process exit code.
+- Tokens and other sensitive inputs never appear in logs or command output.
 
-Keep unit tests next to this adapter's public behavior. This shim is a security
-boundary, not an invitation to grow a local framework. The executable is a
-GitHub Actions program only; do not add a local CLI or best-effort local mode.
+Keep focused unit tests around this adapter's public behavior. This shim is a
+security boundary, not an invitation to add a local framework. The executable
+is a GitHub Actions program only; do not add a local CLI or best-effort local
+mode.
 
 ## Native GitHub API Client
 
-Use Node's built-in `fetch` rather than introducing a general-purpose HTTP or
-GitHub SDK when the action only needs a GraphQL request and three label REST
+Use Node's built-in `fetch`. Do not introduce a general-purpose HTTP or GitHub
+SDK when the action only needs its current GraphQL query and label REST
 operations.
 
 The client must:
@@ -460,70 +423,78 @@ The client must:
 - Parse non-success responses into bounded, useful error messages without
   dumping secrets or untrusted response bodies.
 - Detect GraphQL `errors` even when the HTTP status is successful.
-- Validate the response shape at the untrusted JSON boundary before business
-  logic consumes it.
-- Accept an injected `fetch` implementation in tests.
-- Use bounded retries only for explicitly safe and retryable failures. Respect
-  server retry guidance and avoid retrying permanent authorization, validation,
-  or not-found errors.
+- Validate response shapes at the untrusted JSON boundary before business logic
+  consumes them.
+- Accept injected `fetch` and sleep implementations in tests.
+- Use bounded retries only for explicitly safe and retryable failures.
 - Make mutation retry behavior explicit so label operations do not create
   surprising duplicate effects.
 - Use a 15-second timeout for each attempt and make at most three attempts.
-- Use default retry delays of 500 milliseconds and one second. Retry network or
-  timeout failures and HTTP 429, 500, 502, 503, and 504 responses. Retry HTTP
-  403 only when a short `Retry-After` header indicates secondary throttling.
+- Use default retry delays of 500 milliseconds and one second.
+- Retry network or timeout failures and HTTP 429, 500, 502, 503, and 504.
+- Retry HTTP 403 only when a short `Retry-After` value indicates secondary
+  throttling.
 - Honor `Retry-After` for at most ten seconds; fail rather than sleeping longer.
+- Avoid retrying permanent authentication, authorization, validation, and
+  not-found failures, except that label deletion treats 404 as the desired
+  idempotent final state.
 - Limit logged response excerpts to 4 KiB and redact the token defensively.
-- Paginate at 100 nodes per page, reject repeated cursors/pages, and fail after
-  100 pages or 10,000 nodes.
+- Paginate at 100 nodes or records per page, reject repeated cursors or pages,
+  and fail after 100 pages or 10,000 nodes.
 
-Do not broaden permissions to compensate for client errors. The README and
-acceptance workflow should continue to demonstrate least-privilege permissions.
+Do not broaden workflow permissions to compensate for client errors. The README
+and acceptance workflow should continue to demonstrate least-privilege
+permissions.
 
 ## Testing and Coverage
 
-The target test stack is Node's standard library:
+The test stack is Node's standard library:
 
 - `node:test`
 - `node:assert/strict`
-- `mock.fn`, `mock.method`, and explicit fakes where appropriate
+- `mock.fn`, `mock.method`, and explicit typed fakes where appropriate
 - Node's built-in test coverage
 
 Do not reintroduce Jest, Babel, a Jest compatibility layer, or a third-party
-coverage package. Rewrite assertions to native APIs instead of preserving old
-test-framework syntax indefinitely.
+coverage package. Write assertions with native APIs.
 
-Coverage gates must be exactly:
+Coverage gates are exactly:
 
 - 100% lines
 - 100% branches
 - 100% functions
 
-Coverage exclusions must be exceptional. Do not add ignore comments to make a
+Coverage exclusions are exceptional. Do not add ignore comments to make a
 number green when a branch can be tested or refactored. If generated code or a
-minimal executable-only line truly cannot be covered, isolate it and explain the
-tradeoff before adding an exclusion.
+minimal executable-only line truly cannot be covered, isolate it and explain
+the tradeoff before adding an exclusion.
 
-Tests should run serially because some cases modify process environment and
-GitHub Actions environment files. Tests should cover behavior, not
-implementation trivia. Include:
+Tests run serially because cases modify process environment and GitHub Actions
+environment files. Tests should cover behavior, not implementation trivia.
+Include:
 
 - Input normalization, required values, fallbacks, and malformed values.
+- `GITHUB_JOB` context loading and failure when it is missing.
+- Explicit `workflow` input precedence over the current job fallback.
+- Exact, trimmed, and case-sensitive current-check exclusion.
+- Custom, matrix, and reusable-workflow check names supplied explicitly.
+- A differing top-level workflow name that is not mistaken for the current
+  check name.
 - Token redaction and safe logging.
 - GraphQL success, HTTP failure, GraphQL error payloads, malformed JSON, and
   unexpected response shapes.
 - GitHub.com endpoint construction and explicit rejection of GHES endpoints.
 - Required-check and all-check modes.
 - CheckRun and StatusContext nodes.
-- Exact and case-sensitive exclusions, including self-exclusion.
-- Empty checks, missing rollups, unknown statuses, skipped/neutral checks, and
-  pending/failing checks.
+- Empty checks, missing rollups, unknown statuses, skipped or neutral checks,
+  and pending or failing checks.
 - Every evaluation criterion and malformed `min_approvals` forms.
 - Output serialization, including `null`, booleans, and zero.
-- Label add/remove/no-op paths and API failures.
+- Label add, remove, no-op, overlap, retry, and failure paths.
 - PASS and FAIL label selection.
 - Top-level success and top-level failure behavior.
 - Workflow command escaping and multiline output writes.
+- The executable entrypoint with temporary event and output files.
 
 Prefer small fixtures and typed builders over repeated thousand-line response
 objects. Shared test builders are appropriate when they reduce duplication
@@ -537,62 +508,68 @@ acceptable only because CI independently enforces all three 100% thresholds.
 
 CI is part of the product for a public GitHub Action.
 
-Expected checks:
+Required checks:
 
-- Strict TypeScript type-checking.
-- Native unit tests with 100% line, branch, and function coverage.
-- Rebuild of `dist/` followed by a clean-tree comparison.
-- An acceptance workflow that executes the local action with `uses: ./` and
-  verifies representative outputs without creating a circular status check.
+- `test`: native unit tests with 100% line, branch, and function coverage and a
+  deterministic coverage badge check.
+- `lint`: strict TypeScript type checking; the historic check name is retained
+  for ruleset compatibility.
+- `package-check`: clean rebuild and comparison of the committed `dist/`
+  artifacts.
+- `acceptance`: read-only execution of the checked-in action through `uses: ./`
+  with representative output assertions.
 
 Workflow requirements:
 
 - Run repository CI on Ubuntu only.
-- Pin third-party actions to full commit SHAs and retain a comment naming the
-  intended release tag.
+- Pin every external action to a full 40-character commit SHA and retain a
+  comment naming the intended release tag.
+- Preserve repository-level enforcement that requires full-SHA action pinning.
+- Treat local `uses: ./` references as intentional and permitted.
 - Use explicit, least-privilege `permissions:` blocks.
 - Set `persist-credentials: false` on checkout unless a reviewed later step
   genuinely requires Git writes.
 - Use the exact Node version from `.node-version` for development checks.
 - Use `npm ci --ignore-scripts` against the committed lockfile.
 - Do not expose secrets to pull requests from forks.
-- Keep test, typecheck, package verification, and acceptance responsibilities
-  legible. They may be separate jobs or workflows when that improves failure
-  diagnosis.
+- Keep testing, type checking, package verification, and acceptance
+  responsibilities legible.
 - Detect untracked generated files as well as tracked bundle diffs.
 
-Preserve the required check names `test`, `lint`, and `package-check`.
-`lint` remains the externally visible check name but runs strict TypeScript
-checking rather than a third-party lint stack. The package check must rebuild a
-clean `dist/` and inspect `git status --porcelain -- dist/`.
+The package check must rebuild a clean `dist/` and inspect
+`git status --porcelain -- dist/` so changed and untracked artifacts both fail
+the check.
 
 The read-only pull-request acceptance workflow must execute `uses: ./`, request
 only read permissions for contents, checks, statuses, and pull requests, avoid
 all label inputs, and assert representative outputs. It must be safe for forked
-pull requests and must not receive write credentials.
+pull requests and must not receive write credentials. Keep acceptance focused
+on deterministic criteria such as `not_draft`; do not create a circular or
+timing-dependent `ci_passing` assertion.
 
 Do not claim a build is hermetic merely because it uses `npm ci`. A truly
 hermetic build must pass the airplane test: from a clean checkout and documented
-toolchain, it can type-check, test, and bundle without network access. If npm
-artifacts are not vendored, describe the build as locked and reproducible rather
-than fully hermetic.
+toolchain, it can type-check, test, and bundle without network access. Because
+npm artifacts are not vendored, describe the current build as locked and
+reproducible rather than fully hermetic.
 
 ## Bundling
 
 GitHub executes `dist/index.js`, not the TypeScript source.
 
-For any change to runtime source, runtime dependencies, TypeScript configuration,
-or bundle configuration:
+For any change to runtime source, runtime dependencies, TypeScript
+configuration, version metadata embedded in runtime code, or bundle
+configuration:
 
-1. Run the typecheck and unit coverage gates.
+1. Run the type check and native unit coverage gates.
 2. Rebuild `dist/` with the repository's `@vercel/ncc` command.
-3. Inspect all generated files and license changes.
+3. Inspect `dist/index.js`, `dist/index.js.map`, and license output.
 4. Confirm no absolute local paths, source secrets, unrelated files, or
    non-public information entered the bundle or source map.
 5. Commit source and generated output together when publication is requested.
 
 Never patch `dist/` manually. Never accept a generated bundle that cannot be
-reproduced from the same commit.
+reproduced from the same commit. A source-only runtime change is incomplete.
 
 ## Dependency and Build Reproducibility
 
@@ -601,11 +578,11 @@ Follow a slow dependency cadence:
 - Keep exact versions and a committed lockfile.
 - Keep the existing Dependabot cooldown or make it stricter; do not weaken it
   casually.
-- Verify that the pinned npm version actually recognizes any install-time
+- Verify that the pinned npm version recognizes any install-time
   minimum-release-age setting. Do not count an ignored `.npmrc` key as a supply
   chain control.
-- Review changelogs, transitive graph changes, lifecycle scripts, and generated
-  bundle changes for every update.
+- Review changelogs, transitive graph changes, lifecycle scripts, licenses, and
+  generated bundle changes for every update.
 - Avoid automatic lockfile repair or broad update commands.
 - Separate dependency updates from behavior changes where practical.
 - Keep an auditable record of why every remaining package is necessary.
@@ -613,7 +590,7 @@ Follow a slow dependency cadence:
 The committed `dist/` directory makes the consumer runtime self-contained, but
 it does not by itself make development builds offline or hermetic. If full
 offline rebuilds become a requirement, design and document vendoring separately
-rather than smuggling cache artifacts into an unrelated migration change.
+rather than committing cache artifacts in an unrelated change.
 
 ## Style
 
@@ -630,9 +607,8 @@ For maintained TypeScript:
 - Comments that explain why, security constraints, or non-obvious protocol
   behavior; do not narrate obvious code.
 
-There is no requirement to add a formatter dependency. Keep touched code
-consistent by hand and use review to enforce the deliberately small style
-surface.
+There is no formatter dependency. Keep touched code consistent by hand and use
+review to enforce the deliberately small style surface.
 
 ## Documentation
 
@@ -643,60 +619,97 @@ Document:
 
 - Inputs, outputs, defaults, and accepted values.
 - Required workflow permissions.
-- Failure and fail-open semantics that affect workflow design.
-- Exact check-exclusion behavior.
-- Supported GitHub environments if the API client changes.
-- Release or migration notes for any user-visible behavior change.
+- The distinction between evaluation `FAIL` and action execution failure.
+- Four-state commit-status behavior and fail-closed `ci_passing` semantics.
+- Exact, case-sensitive check exclusion behavior.
+- The `workflow` input's job/check-name meaning, `${{ github.job }}` default,
+  and custom, matrix, and reusable-workflow override requirements.
+- Unique latest non-bot approval counting.
+- Requested label-mutation failure behavior.
+- GitHub.com-only support and the absence of GHES or proxy guarantees.
+- Release and upgrade notes for user-visible behavior changes.
 
-Do not paste routine validation transcripts or dependency-audit noise into the
-README or pull request body.
+Keep `action.yml`, README tables and examples, implementation, tests, and
+generated bundle synchronized. Do not paste routine validation transcripts or
+dependency-audit noise into the README or pull request body.
 
-## Release Safety
+## Release and Tag Safety
 
-`script/release` creates and pushes tags. The tag-maintenance workflow force
-moves a major-version tag. Both are externally visible and affect downstream
-users.
+`script/release` creates and pushes an immutable version tag. The major-tag
+workflow force-updates one selected major tag. Both operations are externally
+visible and affect downstream users.
 
-Before a release:
+Every release follows this sequence:
 
-1. Confirm the intended semantic version and source commit.
-2. Confirm source, tests, action metadata, README, and `dist/` agree.
-3. Review the complete published commit history and generated bundle.
-4. Confirm required CI and acceptance checks passed.
-5. Confirm the major tag points to the intended immutable version tag.
+1. Choose the semantic version and confirm whether the changes require a new
+   major version.
+2. In a dedicated release-preparation pull request, update `src/version.ts`,
+   tests that assert the versioned user agent, supported README usage examples,
+   and the generated `dist/` artifacts. Do not change the private package
+   version unless a separate package-publishing policy requires it.
+3. Merge the release-preparation PR only after required CI and acceptance checks
+   pass, then confirm the updated `main` merge commit is green.
+4. Synchronize a clean local `main` exactly with `origin/main` and review the
+   complete source, generated bundle, source map, licenses, commit history, and
+   public metadata.
+5. Obtain explicit user confirmation immediately before creating a public tag.
+6. Run `script/release` to create and push only the intended annotated immutable
+   `vMAJOR.MINOR.PATCH` tag.
+7. Verify the version tag resolves to the intended green `main` commit.
+8. Publish a non-draft, non-prerelease GitHub Release with curated public-safe
+   notes, upgrade guidance, compatibility information, and a comparison link.
+9. Dispatch the major-tag workflow with the immutable version tag as its source
+   and the matching `vMAJOR` tag as its destination.
+10. Verify the major tag and immutable version tag resolve to the same commit,
+    while all older supported major tags remain unchanged.
+11. Complete any Marketplace update as a separate explicit publication step.
 
-Never run a release helper, move a tag, or force-push a tag without explicit user
-authorization.
+Never run a release helper, create or push a tag, publish a release, move a
+major tag, or update a Marketplace listing without explicit user authorization.
 
-Neither approved migration PR changes `VERSION`, creates or moves a tag, or
-prepares/publishes a release. Release execution is expressly out of scope even
-though PR 1 hardens the release helper and tag-maintenance workflow.
+A breaking release receives a new major tag. Never move an older major tag onto
+a breaking implementation. Immutable version tags must never be recreated or
+moved. The tag-maintenance workflow may force-update only the intended matching
+major tag after validating the source tag and major version.
+
+Do not treat a version edit as documentation-only: the version is embedded in
+the native client's user agent and therefore requires tests and a complete
+bundle rebuild.
 
 ## Working Process
 
 For a normal runtime change:
 
 1. Start from current `main` and confirm the working tree is clean.
-2. Characterize existing behavior with a test when it is not already covered.
-3. Make the smallest source change.
-4. Add or update focused TypeScript tests.
-5. Run strict type-checking and the native 100% coverage gate.
-6. Rebuild and review `dist/`.
-7. Update `action.yml` and README only when the public contract changes.
-8. Review the complete diff for public-repository safety.
+2. Create a descriptive branch using the naming convention requested for the
+   change.
+3. Characterize existing behavior with a test when it is not already covered.
+4. Make the smallest source change.
+5. Add or update focused TypeScript tests.
+6. Run strict type checking and the native 100% coverage gate.
+7. Rebuild and review `dist/`.
+8. Update `action.yml` and README when the public contract changes.
+9. Review the complete diff and branch history for public-repository safety.
+10. Publish only when explicitly requested.
 
-For the approved redesign, follow the branch and merge boundary in **Approved
-Migration Sequence** rather than treating both phases as one normal runtime
-change.
+For a documentation-only change:
 
-For dependency removal:
+1. Confirm that no runtime behavior or metadata contract changes implicitly.
+2. Keep examples consistent with `action.yml` and tests.
+3. Avoid introducing promises the runtime does not enforce.
+4. Review links, version references, and public wording before publication.
 
-1. Prove the package is unused or identify its exact used surface.
-2. Replace only that surface with a small local or Node-native implementation.
-3. Add parity tests before removing the package.
-4. Remove the direct dependency and regenerate the lockfile with approval.
-5. Review the full transitive graph reduction and bundle license changes.
-6. Rebuild `dist/` and run acceptance coverage.
+For a dependency update:
+
+1. Identify the package's exact required surface and why the update is needed.
+2. Confirm Node built-ins or the existing local implementation cannot satisfy
+   the need more safely.
+3. Obtain explicit dependency-installation approval.
+4. Use an exact version and the lockfile-respecting install path.
+5. Review the full transitive graph, lifecycle scripts, license changes, and
+   published contents.
+6. Run the complete TypeScript, coverage, bundle, and acceptance gates.
+7. Review generated artifacts before publication.
 
 ## Response Style
 
@@ -711,16 +724,19 @@ what passed or what could not be run and why.
 ## Common Pitfalls
 
 - Logging the full parsed input object and exposing `github_token`.
-- Treating TypeScript execution as TypeScript type-checking.
-- Preserving Jest-style tests through a large compatibility shim instead of
-  using `node:test` directly.
+- Treating the top-level workflow name as the current job/check name.
+- Assuming `${{ github.job }}` matches a custom, matrix, or reusable-workflow
+  displayed check name without an explicit `workflow` override.
+- Weakening exact, case-sensitive check exclusions with fuzzy matching.
+- Treating TypeScript execution as TypeScript type checking.
+- Reintroducing a test compatibility layer instead of using `node:test`.
 - Replacing one dependency with a more complicated home-grown framework.
-- Accidentally claiming GHES or proxy support in the GitHub.com-only native
-  client.
-- Removing Octokit without preserving GraphQL error handling, bounded retry
-  behavior, pagination, and response validation.
+- Accidentally claiming GHES or proxy support in the GitHub.com-only client.
+- Changing bounded GraphQL error handling, retry behavior, pagination, or
+  response validation without complete tests.
 - Writing unescaped workflow commands or unsafe multiline outputs.
-- Changing fail-open status behavior during a mechanical migration.
+- Converting legitimate evaluation `FAIL` into action failure, or suppressing
+  real configuration, API, protocol, and label errors as evaluations.
 - Counting a static `100%` badge as proof without enforcing all coverage
   thresholds.
 - Running `npm install` and unintentionally rewriting the lockfile.
@@ -728,5 +744,7 @@ what passed or what could not be run and why.
 - Editing `dist/` manually.
 - Verifying only tracked bundle diffs while missing new untracked generated
   files.
-- Using floating action tags in workflows instead of immutable SHAs.
-- Publishing branch, commit, or PR metadata that contains non-public context.
+- Using floating action tags instead of immutable 40-character SHAs.
+- Moving an old major tag onto a breaking release.
+- Publishing branch, commit, PR, tag, or release metadata that contains
+  non-public context.

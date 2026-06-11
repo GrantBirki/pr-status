@@ -24,7 +24,7 @@ endpoints and does not claim support for self-hosted HTTP proxies.
 | ----- | --------- | ------- | ----------- |
 | `github_token` | `true` | `${{ github.token }}` | The GitHub.com token used to read pull request state and, when labels are configured, update labels |
 | `pr_number` | `true` | `${{ github.event.number }}` | A positive integer identifying the pull request to evaluate |
-| `workflow` | `false` | `${{ github.workflow }}` | The name of the workflow that is running this action. It is automatically excluded from CI status evaluation so the action does not wait on itself. |
+| `workflow` | `false` | `${{ github.job }}` | The exact, case-sensitive current job/check name to exclude so the action does not evaluate itself. Override it when GitHub reports a custom, matrix, or reusable-workflow check name. |
 | `checks` | `true` | `all` | Exactly `all` or `required`, selecting which CI checks to evaluate |
 | `evaluations` | `false` | `approved` | A case-sensitive comma-separated list containing `approved`, `ci_passing`, `mergeable`, `not_draft`, or `min_approvals=N`. An explicitly empty value evaluates to `PASS`. |
 | `pass_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation passes - Examples: `"ready-for-deployment,approved"` |
@@ -46,8 +46,8 @@ action step instead of producing an evaluation result.
 | `approved` | The string `"true"` when `reviewDecision` is `APPROVED` or null, and `"false"` otherwise |
 | `total_approvals` | The number of unique non-bot actors whose latest review is `APPROVED` |
 | `review_decision` | GitHub's review decision, such as `APPROVED`, `CHANGES_REQUESTED`, or `REVIEW_REQUIRED`; empty when GitHub returns null |
-| `merge_state_status` | The status of the pull request merge state - Examples: `"CLEAN"`, `"DIRTY"`, `"UNKNOWN"`, `"DRAFT"`, `"BLOCKED"`, etc |
-| `mergeable_state` | The mergeable state of the pull request - Examples: `"MERGEABLE"`, `"UNSTABLE"`, `"CONFLICTING"`, `"UNKNOWN"`, etc |
+| `merge_state_status` | GitHub's merge state status: `CLEAN`, `DIRTY`, `BLOCKED`, `BEHIND`, `UNSTABLE`, `HAS_HOOKS`, or `UNKNOWN` |
+| `mergeable_state` | GitHub's mergeable state: `MERGEABLE`, `CONFLICTING`, or `UNKNOWN` |
 | `commit_status` | Exactly one normalized CI state: `SUCCESS`, `FAILURE`, `PENDING`, or `UNKNOWN` |
 | `is_draft` | The string "true" if the pull request is in draft status, "false" otherwise |
 | `evaluation` | `PASS` or `FAIL` after ANDing all requested evaluation criteria |
@@ -66,14 +66,18 @@ The evaluations input allows you to specify which attributes to evaluate the pul
 - `ci_passing`: Passes only when the selected checks normalize to `SUCCESS`.
   Having no selected CI evidence, including after exclusions, normalizes to
   `UNKNOWN` and fails closed.
-- `mergeable`: Checks if the pull request is in a cleanly mergeable state
+- `mergeable`: Passes only when GitHub reports the pull request's mergeable state as `MERGEABLE`
 - `min_approvals=N`: Checks the unique latest non-bot approval count. `N` must
   be `0` or a positive integer without signs, whitespace, or leading zeroes;
   `min_approvals=0` always passes.
 - `not_draft`: Checks if the pull request is not in draft status
 
 > [!TIP]  
-> When using the `ci_passing` evaluation, this action will automatically exclude itself from the CI check evaluation to avoid circular dependencies. You can customize which checks to exclude using the `exclude_checks` input parameter.
+> When using the `ci_passing` evaluation, this action excludes the exact check
+> name supplied through `workflow` to avoid evaluating itself. The default
+> `${{ github.job }}` works when the job ID is also the reported check name;
+> custom, matrix, and reusable-workflow check names must be supplied explicitly.
+> Use `exclude_checks` for additional checks.
 
 Evaluation names are case-sensitive and unknown or malformed criteria are
 configuration errors. A null GitHub `reviewDecision` continues to satisfy
@@ -131,7 +135,7 @@ jobs:
         id: pr-status
         with:
           evaluations: approved,ci_passing # evaluate the given PR against the approved and ci_passing attributes
-          exclude_checks: pr-status,my-other-check # exclude the pr-status check and my-other-check from CI evaluation
+          exclude_checks: my-other-check # exclude an additional check from CI evaluation
           pass_labels: ready-for-deployment # if the PR passes evaluation, apply the ready-for-deployment label
 
       # view some extra outputs the action sets
@@ -157,21 +161,45 @@ retries fails the action step.
 
 ## How to Exclude Certain CI Checks 🚫
 
-When using the `ci_passing` evaluation, you may want to exclude certain CI checks from the status evaluation. This is especially important to avoid circular dependencies where this action would check itself. This action provides both automatic and manual exclusion capabilities.
+When using the `ci_passing` evaluation, exclude the action's own in-progress
+check to avoid a circular dependency. The `workflow` input identifies that
+check, while `exclude_checks` identifies any additional checks to ignore.
 
-### Automatic Self-Exclusion
+### Current-Job Self-Exclusion
 
-By default, this action automatically excludes itself from CI status evaluation to prevent circular dependencies. This is accomplished through the `workflow` input parameter, which defaults to `${{ github.workflow }}`.
+The `workflow` input is retained for compatibility, but its value is an exact
+job/check name rather than a top-level workflow name. It defaults to
+`${{ github.job }}`, GitHub's current job ID.
 
 **How it works:**
 
-- The action receives the current workflow name via `${{ github.workflow }}`
-- This workflow name is automatically added to the list of checks to exclude
-- When evaluating CI status, any check with a name matching the workflow name is excluded
+- The action receives the current job ID through `${{ github.job }}`.
+- The resolved value is added to the exact, case-sensitive exclusion set.
+- A `CheckRun.name` or `StatusContext.context` matching that value is excluded.
 
-**Example:**
+The default works when the job ID is also the check name, which is the normal
+case for a job without a custom display name. GitHub can report a different
+check name when a job defines `name`, expands a matrix, or calls a reusable
+workflow. In those cases, pass the complete check name shown by GitHub.
 
-If your workflow is named `pr-status`, the action will automatically exclude any CI check named `pr-status` from evaluation.
+**Custom job-name example:**
+
+```yaml
+jobs:
+  evaluate:
+    name: Evaluate pull request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: GrantBirki/pr-status@vX.X.X
+        with:
+          evaluations: approved,ci_passing
+          workflow: Evaluate pull request
+```
+
+For a matrix job, supply the fully rendered name, including its matrix values.
+For a reusable workflow, supply the full caller/called-job check name GitHub
+reports. Matching is deliberately exact; the action does not guess, use prefix
+matching, or exclude every check in the current workflow run.
 
 ### Manual Check Exclusion
 
@@ -188,11 +216,11 @@ You can also manually exclude specific CI checks using the `exclude_checks` inpu
 ```
 
 ```yaml
-# Exclude multiple checks including this action's own check
+# Exclude multiple additional checks
 - uses: GrantBirki/pr-status@vX.X.X
   with:
     evaluations: approved,ci_passing
-    exclude_checks: pr-status,my-custom-check,third-party-tool
+    exclude_checks: my-custom-check,third-party-tool
 ```
 
 ### Check Name Matching Rules
@@ -227,10 +255,10 @@ The action intelligently handles both types and uses the appropriate field for e
 
 ### Best Practices
 
-1. **Always exclude self**: The automatic self-exclusion handles this, but be aware it's happening
-2. **Use exact names**: Make sure your exclusion names match exactly what appears in GitHub's CI status
+1. **Check custom names**: Set `workflow` explicitly when the reported check name differs from the job ID
+2. **Use exact names**: Make sure exclusion values match exactly what appears in GitHub's CI status
 3. **Test your exclusions**: Use debug mode to verify the correct checks are being excluded
-4. **Document exclusions**: Comment your workflow to explain why certain checks are excluded
+4. **Document exclusions**: Comment your workflow to explain why additional checks are excluded
 
 ## Development 🛠️
 

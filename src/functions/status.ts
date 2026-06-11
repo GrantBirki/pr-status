@@ -25,7 +25,7 @@ export type PullRequestStatusClient = Pick<
 export interface StatusData {
   checks: string
   excludeChecks?: readonly string[]
-  workflow?: string | undefined
+  currentCheckName?: string | undefined
 }
 
 export interface StatusResult {
@@ -139,11 +139,11 @@ export function determineCommitStatus(
   checks: readonly GitHubCheck[],
   checkSelection: CheckSelection,
   excludeChecks: readonly string[],
-  workflow?: string
+  currentCheckName?: string
 ): CommitStatus {
   const exclusions = new Set(normalizeConfiguredNames(excludeChecks))
-  if (workflow !== undefined && workflow.trim() !== '') {
-    exclusions.add(workflow.trim())
+  if (currentCheckName !== undefined && currentCheckName.trim() !== '') {
+    exclusions.add(currentCheckName.trim())
   }
 
   const selectedChecks = checks.filter(check => {
@@ -169,8 +169,11 @@ export async function status(
   const exclusions = normalizeConfiguredNames(data.excludeChecks ?? [])
 
   core.info('🔍 Fetching pull request status information...')
-  if (data.workflow !== undefined && data.workflow.trim() !== '') {
-    exclusions.push(data.workflow.trim())
+  if (
+    data.currentCheckName !== undefined &&
+    data.currentCheckName.trim() !== ''
+  ) {
+    exclusions.push(data.currentCheckName.trim())
   }
   core.info(
     `🚫 Checks to exclude from status evaluation: ${normalizeConfiguredNames(exclusions).join(', ')}`
@@ -186,7 +189,7 @@ export async function status(
     pullRequest.checks,
     checkSelection,
     data.excludeChecks ?? [],
-    data.workflow
+    data.currentCheckName
   )
   const result: StatusResult = {
     review_decision: pullRequest.reviewDecision,

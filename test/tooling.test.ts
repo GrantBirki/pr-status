@@ -74,6 +74,19 @@ test('toolchain and dependency budget stay exact', async () => {
   })
 })
 
+test('action metadata defaults self-exclusion to the current job', async () => {
+  const actionMetadata = await readFile(
+    new URL('action.yml', repositoryRoot),
+    'utf8'
+  )
+
+  assert.match(
+    actionMetadata,
+    /  workflow:\n    description: [^\n]+\n    default: \$\{\{ github\.job \}\}\n    required: false\n/u
+  )
+  assert.doesNotMatch(actionMetadata, /github\.workflow/u)
+})
+
 test('lockfile uses public package URLs and no lifecycle scripts', async () => {
   const packageLock = JSON.parse(
     await readFile(new URL('package-lock.json', repositoryRoot), 'utf8')
