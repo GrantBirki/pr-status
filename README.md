@@ -192,11 +192,15 @@ caller-configurable branch-deploy labels:
 Closed and merged pull requests have no managed label. A `clear` transition
 reconciles that live state but does not erase labels if a stale closure event
 runs after the pull request has reopened. Draft pull requests are also cleared
-by default; set `clear_on_draft: false` to retain a branch-deploy state. A stale
-reset preserves the live state, while stale noop or deploy results return to `noop`.
-Failed, cancelled, or skipped noops return to `noop`; the same deployment
-outcomes return to `deploy`. Review events cannot promote a `noop` pull
-request before a successful noop. Unrelated labels are never changed.
+by default; set `clear_on_draft: false` to retain a branch-deploy state. Native
+lifecycle events for an old head are ignored, while stale explicit noop or
+deploy results return to `noop`. A rerun preserves an advanced state but can
+repair a missing or initial state. Failed, cancelled, or skipped noops return
+to `noop`. Deployment outcomes return to `deploy` only while review policy
+passes; otherwise they return to `review`. A successful deployment reaches
+`merge` only while review policy passes unless merge demotion is disabled.
+Review events cannot promote a `noop` pull request before a successful noop.
+Unrelated labels are never changed.
 
 The four configured labels must already exist, must be nonempty, and must be
 distinct. Branch-deploy mode cannot be combined with `pass_labels`,
@@ -230,11 +234,8 @@ changed. Keep the other read permissions unchanged.
 ### Native branch-deploy events
 
 The reusable workflow resolves supported caller events inside the action, so
-the caller needs one job and no inputs. It handles pull request lifecycle and
-review events directly. `github/branch-deploy` emits a trusted
-`repository_dispatch` after each accepted noop or deploy operation. The action
-validates that result against the operation marker in the pull request before
-applying it.
+the lifecycle caller needs one job and no inputs. It handles pull request
+lifecycle and review events directly.
 
 ```yaml
 name: branch-deploy-status
@@ -244,8 +245,6 @@ on:
     types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, closed]
   pull_request_review:
     types: [submitted, dismissed]
-  repository_dispatch:
-    types: [branch-deploy-status]
 
 permissions:
   checks: read
@@ -258,29 +257,62 @@ jobs:
     uses: GrantBirki/pr-status/.github/workflows/branch-deploy-status.yml@vX.X.X # <-- replace with the latest version
 ```
 
-This caller workflow must exist on the default branch before
-`repository_dispatch` events are delivered. The branch-deploy workflow must
-grant `contents: write`, which branch-deploy also uses for its lock state. Help,
-lock, rejected command, and stable-branch runs do not change pull request
-status labels.
+The action compares the event head with the live pull request head before a
+reset. It ignores stale lifecycle events. When an old workflow run is replayed,
+`GITHUB_RUN_ATTEMPT` lets the action preserve an advanced state while still
+repairing an absent or initial state.
 
-The native command path validates the dispatched pull request, operated SHA,
-noop or deploy mode, result, workflow run attempt, job, command comment, and
-the exact status-comment ID returned by `github/branch-deploy`. It fetches that
-comment directly, verifies its pull request ownership and hidden operation
-marker, and ignores an older result when a newer accepted status comment exists
-for the pull request. This path assumes one logical branch-deploy operation per
-job; workflows that fan a single command out to operations with different
-outcomes should use explicit transitions instead. Native marker verification
-also expects branch-deploy to use the repository `GITHUB_TOKEN`, so its comments
-are authored by `github-actions[bot]`; custom comment tokens should use explicit
-transitions. The action never checks out or executes pull request code.
-Explicit `transition`, `pr_number`, `expected_head_sha`, and `operation_result`
-inputs remain available for custom event sources and older branch-deploy
-integrations.
+### Noop and deploy results
 
-Native command results require branch-deploy's normal post-deploy completion;
-callers using `skip_completing: true` must keep the explicit transition path.
+Command reconciliation runs as a dependent job because action outputs do not
+cross workflow boundaries automatically. Export the accepted operation's pull
+request number, head SHA, mode, selected ref, and explicit-SHA value, then pass
+the final job result to the reusable workflow:
+
+```yaml
+jobs:
+  operation:
+    runs-on: ubuntu-latest
+    outputs:
+      continue: ${{ steps.operation.outputs.continue }}
+      noop: ${{ steps.operation.outputs.noop }}
+      pr_number: ${{ steps.operation.outputs.issue_number }}
+      ref: ${{ steps.operation.outputs.ref }}
+      sha: ${{ steps.operation.outputs.sha }}
+      sha_deployment: ${{ steps.operation.outputs.sha_deployment }}
+    steps:
+      - id: operation
+        uses: github/branch-deploy@0123456789012345678901234567890123456789
+
+  branch-deploy-status:
+    needs: operation
+    if: >-
+      ${{
+        always() &&
+        needs.operation.outputs.continue == 'true' &&
+        needs.operation.outputs.sha_deployment == '' &&
+        needs.operation.outputs.ref != github.event.repository.default_branch
+      }}
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: write
+      statuses: read
+    uses: GrantBirki/pr-status/.github/workflows/branch-deploy-status.yml@vX.X.X # <-- replace with the latest version
+    with:
+      transition: ${{ needs.operation.outputs.noop == 'true' && 'noop' || 'deploy' }}
+      pr_number: ${{ fromJSON(needs.operation.outputs.pr_number) }}
+      expected_head_sha: ${{ needs.operation.outputs.sha }}
+      operation_result: ${{ needs.operation.result }}
+```
+
+The guard intentionally ignores stable-branch and explicit-SHA operations,
+which do not describe the current pull request head. Reconciliation queries
+the live review policy after the operation finishes, so approval changes that
+race with a deployment result converge to the correct current state. Help,
+lock, unlock, and rejected commands have an empty `continue` output and do not
+run the dependent job. The action never checks out or executes pull request
+code.
 
 Public fork pull requests receive a read-only `GITHUB_TOKEN` for
 `pull_request` and `pull_request_review` workflows. Native lifecycle label

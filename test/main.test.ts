@@ -29,6 +29,7 @@ const context: ActionContext = {
     action: 'synchronize',
     pull_request: {number: 42, head: {sha: 'abc123'}}
   },
+  runAttempt: 1,
   issueNumber: 42
 }
 
@@ -47,12 +48,6 @@ function clientStub(currentLabels: readonly string[] = []): GitHubClient {
   return {
     async getPullRequestStatus() {
       throw new Error('Unexpected status request')
-    },
-    async getIssueComment() {
-      throw new Error('Unexpected issue comment request')
-    },
-    async listIssueComments() {
-      return []
     },
     async listIssueLabels() {
       return [...currentLabels]
@@ -152,7 +147,7 @@ function createRunFixture(
     stringToArray,
     determineLabelActions,
     determineBranchDeployState,
-    async resolveBranchDeployEvent() {
+    resolveBranchDeployEvent() {
       throw new Error('Unexpected branch-deploy event resolution')
     },
     async label(
@@ -381,6 +376,7 @@ test('parseInputs loads branch-deploy defaults and policy overrides', () => {
       transition: 'review',
       expectedHeadSha: '',
       operationResult: null,
+      preserveAdvancedReset: false,
       labels: {
         noop: 'ready-for-noop',
         review: 'ready-for-review',
@@ -412,6 +408,7 @@ test('parseInputs loads branch-deploy defaults and policy overrides', () => {
         transition: 'deploy',
         expectedHeadSha: 'abc123',
         operationResult: 'failure',
+        preserveAdvancedReset: false,
         labels: {
           noop: 'noop',
           review: 'review',
@@ -534,19 +531,16 @@ test('run resolves branch-deploy transitions from the caller event', async () =>
     pass_labels_cleanup: '',
     fail_labels: ''
   })
-  fixture.dependencies.resolveBranchDeployEvent = async (
-    receivedContext,
-    receivedClient
-  ) => {
+  fixture.dependencies.resolveBranchDeployEvent = receivedContext => {
     fixture.callOrder.push('resolve')
     assert.equal(receivedContext, context)
-    assert.ok(receivedClient)
     return {
       shouldReconcile: true,
       transition: 'reset',
       prNumber: 42,
       expectedHeadSha: 'abc123',
-      operationResult: null
+      operationResult: null,
+      preserveAdvancedReset: false
     }
   }
 
@@ -577,7 +571,7 @@ test('run succeeds without API evaluation when an event is not actionable', asyn
     pass_labels_cleanup: '',
     fail_labels: ''
   })
-  fixture.dependencies.resolveBranchDeployEvent = async () => {
+  fixture.dependencies.resolveBranchDeployEvent = () => {
     fixture.callOrder.push('resolve')
     return {
       shouldReconcile: false,
@@ -599,6 +593,48 @@ test('run succeeds without API evaluation when an event is not actionable', asyn
   )
 })
 
+test('run ignores a native reset for a stale event head', async () => {
+  const fixture = createRunFixture(
+    true,
+    {
+      mode: 'branch-deploy',
+      transition: '',
+      pr_number: '',
+      pass_labels: '',
+      pass_labels_cleanup: '',
+      fail_labels: ''
+    },
+    ['ready-for-review']
+  )
+  fixture.dependencies.resolveBranchDeployEvent = () => {
+    fixture.callOrder.push('resolve')
+    return {
+      shouldReconcile: true,
+      transition: 'reset',
+      prNumber: 42,
+      expectedHeadSha: 'old-head',
+      operationResult: null,
+      preserveAdvancedReset: false
+    }
+  }
+
+  assert.equal(await run(fixture.dependencies), 'success')
+  assert.deepEqual(fixture.callOrder, [
+    'context',
+    'client',
+    'resolve',
+    'status',
+    'outputs'
+  ])
+  assert.deepEqual(fixture.labelActions, [])
+  assert.equal(fixture.recording.outputs.get('branch_deploy_state'), 'review')
+  assert.equal(fixture.recording.outputs.get('head_matches'), 'false')
+  assert.equal(
+    fixture.recording.outputs.get('branch_deploy_reconciled'),
+    'false'
+  )
+})
+
 test('run fails when event resolution does not provide a pull request number', async () => {
   const fixture = createRunFixture(true, {
     mode: 'branch-deploy',
@@ -608,12 +644,13 @@ test('run fails when event resolution does not provide a pull request number', a
     pass_labels_cleanup: '',
     fail_labels: ''
   })
-  fixture.dependencies.resolveBranchDeployEvent = async () => ({
+  fixture.dependencies.resolveBranchDeployEvent = () => ({
     shouldReconcile: true,
     transition: 'review',
     prNumber: null as unknown as number,
     expectedHeadSha: '',
-    operationResult: null
+    operationResult: null,
+    preserveAdvancedReset: false
   })
 
   assert.equal(await run(fixture.dependencies), 'failure')
@@ -731,6 +768,7 @@ test('native bundled-style entrypoint executes with read-only API behavior', asy
     GITHUB_JOB: 'integration',
     GITHUB_OUTPUT: outputPath,
     GITHUB_REPOSITORY: 'octocat/example',
+    GITHUB_RUN_ATTEMPT: '1',
     INPUT_GITHUB_TOKEN: 'synthetic-entrypoint-value',
     INPUT_WORKFLOW: '',
     INPUT_CHECKS: 'all',

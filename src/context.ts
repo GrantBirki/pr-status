@@ -10,6 +10,7 @@ export interface ActionContext {
   job: string
   eventName: string
   eventPayload: Record<string, unknown>
+  runAttempt: number
   issueNumber: number | undefined
 }
 
@@ -61,6 +62,22 @@ function requiredEnvironmentValue(
   return value
 }
 
+function positiveIntegerEnvironmentValue(
+  environment: NodeJS.ProcessEnv,
+  name: string
+): number {
+  const value = requiredEnvironmentValue(environment, name)
+  if (!/^[1-9][0-9]*$/u.test(value)) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${name} must be a positive safe integer`)
+  }
+  return parsed
+}
+
 export function loadActionContext(
   dependencies: ContextDependencies = {
     environment: process.env,
@@ -86,6 +103,10 @@ export function loadActionContext(
 
   const eventPath = requiredEnvironmentValue(environment, 'GITHUB_EVENT_PATH')
   const eventName = requiredEnvironmentValue(environment, 'GITHUB_EVENT_NAME')
+  const runAttempt = positiveIntegerEnvironmentValue(
+    environment,
+    'GITHUB_RUN_ATTEMPT'
+  )
   const job = requiredEnvironmentValue(environment, 'GITHUB_JOB')
   const payload = parseEventPayload(dependencies.readFile(eventPath))
   const issueNumber =
@@ -101,6 +122,7 @@ export function loadActionContext(
     job,
     eventName,
     eventPayload: payload,
+    runAttempt,
     issueNumber
   }
 }

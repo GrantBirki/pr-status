@@ -122,7 +122,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
-      group: branch-deploy-status-${{ github.repository }}-${{ github.event.pull_request.number || github.event.client_payload.operation.pr_number || inputs.pr_number || github.event.issue.number || github.run_id }}
+      group: branch-deploy-status-${{ github.repository }}-${{ github.event.pull_request.number || inputs.pr_number || github.event.issue.number || github.run_id }}
       queue: max
     outputs:
       branch_deploy_reconciled: ${{ steps.pr-status.outputs.branch_deploy_reconciled }}

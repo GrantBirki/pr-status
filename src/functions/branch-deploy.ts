@@ -42,6 +42,7 @@ export interface BranchDeployConfiguration extends BranchDeployPolicy {
   transition: BranchDeployTransition
   expectedHeadSha: string
   operationResult: OperationResult | null
+  preserveAdvancedReset: boolean
 }
 
 export interface BranchDeployPullRequest {
@@ -160,7 +161,13 @@ export function determineBranchDeployState(
     state = 'cleared'
   } else if (configuration.transition === 'reset') {
     headMatches = pullRequest.headSha === configuration.expectedHeadSha
-    state = headMatches ? 'noop' : (currentState ?? 'noop')
+    state =
+      headMatches &&
+      (!configuration.preserveAdvancedReset ||
+        currentState === null ||
+        currentState === 'noop')
+        ? 'noop'
+        : (currentState ?? 'noop')
   } else if (configuration.transition === 'clear') {
     state = currentState ?? 'noop'
   } else if (
@@ -170,13 +177,22 @@ export function determineBranchDeployState(
     headMatches = pullRequest.headSha === configuration.expectedHeadSha
     if (!headMatches) {
       state = 'noop'
-    } else if (configuration.operationResult !== 'success') {
-      state =
-        configuration.transition === 'noop' ? 'noop' : 'deploy'
     } else if (configuration.transition === 'noop') {
+      state =
+        configuration.operationResult === 'success'
+          ? evaluationPassed
+            ? 'deploy'
+            : 'review'
+          : 'noop'
+    } else if (configuration.operationResult !== 'success') {
       state = evaluationPassed ? 'deploy' : 'review'
-    } else {
+    } else if (
+      evaluationPassed ||
+      !configuration.demoteMergeOnReviewFailure
+    ) {
       state = 'merge'
+    } else {
+      state = 'review'
     }
   } else if (currentState === null || currentState === 'noop') {
     state = 'noop'

@@ -196,10 +196,9 @@ It inherits the caller's explicitly scoped `GITHUB_TOKEN` permissions so
 read-only dry runs remain possible; non-dry calls require callers to grant
 `pull-requests: write`.
 The workflow serializes branch-deploy state changes per pull request. Native
-command results arrive through a `branch-deploy-status` repository dispatch and
-must be verified against the trusted operation marker in the pull request.
-Correctness must continue to come from live PR state, head SHA, reviews,
-operation freshness, and labels.
+lifecycle events are resolved from the caller event, while command results use
+explicit inputs from a dependent branch-deploy job. Correctness must continue
+to come from live PR state, head SHA, reviews, operation freshness, and labels.
 
 When changing any public input, output, evaluation, or label behavior, update all
 of the following together:
@@ -219,8 +218,7 @@ otherwise:
 1. Read and validate action inputs and GitHub Actions context.
 2. Resolve repository and pull request context from documented GitHub Actions
    environment variables and event payload data. In native branch-deploy mode,
-   resolve supported lifecycle events or a verified repository dispatch before
-   querying pull request state.
+   resolve supported lifecycle events before querying pull request state.
 3. Resolve the exact current job/check name from a nonempty explicit `workflow`
    input or the required `GITHUB_JOB` context fallback.
 4. Validate configuration before making an API request.
@@ -440,8 +438,8 @@ mode.
 ## Native GitHub API Client
 
 Use Node's built-in `fetch`. Do not introduce a general-purpose HTTP or GitHub
-SDK when the action only needs its current GraphQL query and focused pull
-request REST operations.
+SDK when the action only needs its current GraphQL query and label REST
+operations.
 
 The client must:
 
@@ -476,12 +474,6 @@ The client must:
 - Limit logged response excerpts to 4 KiB and redact the token defensively.
 - Paginate at 100 nodes or records per page, reject repeated cursors or pages,
   and fail after 100 pages or 10,000 nodes.
-- Treat repository-dispatch payloads and issue comments as untrusted data.
-  Validate every command-result field, accept markers only from
-  `github-actions[bot]`, verify the exact marker-bearing comment belongs to the
-  expected pull request, and ignore an older command result when a newer trusted
-  operation marker exists for the pull request.
-
 Do not broaden workflow permissions to compensate for client errors. The README
 and acceptance workflow should continue to demonstrate least-privilege
 permissions.
@@ -529,8 +521,8 @@ Include:
 - Empty checks, missing rollups, unknown statuses, skipped or neutral checks,
   and pending or failing checks.
 - Every evaluation criterion and malformed `min_approvals` forms.
-- Native branch-deploy event resolution, repository dispatches, stable-branch
-  commands, stale results, untrusted comments, and malformed markers.
+- Native branch-deploy lifecycle event resolution, malformed payloads, stale
+  event heads, replayed resets, explicit command results, and review races.
 - Output serialization, including `null`, booleans, and zero.
 - Label add, remove, no-op, overlap, retry, and failure paths.
 - PASS and FAIL label selection.

@@ -70,9 +70,8 @@ export interface MainDependencies {
   determineLabelActions: typeof selectLabelActions
   determineBranchDeployState: typeof selectBranchDeployState
   resolveBranchDeployEvent(
-    context: ActionContext,
-    client: GitHubClient
-  ): Promise<BranchDeployEventResolution>
+    context: ActionContext
+  ): BranchDeployEventResolution
   label: typeof reconcileLabels
 }
 
@@ -156,7 +155,8 @@ export function parseInputs(
         operationResult: parseOperationResult(
           core.getInput('operation_result'),
           transition
-        )
+        ),
+        preserveAdvancedReset: false
       }
       validateBranchDeployConfiguration(configuration)
       prNumber = parsePullRequestNumber(
@@ -239,15 +239,13 @@ export async function run(
     const client = dependencies.createClient(inputs.token)
     let prNumber = inputs.prNumber
     let branchDeployConfiguration: BranchDeployConfiguration | null = null
+    let nativeBranchDeployEvent = false
 
     if (inputs.branchDeploy !== null) {
       if (inputs.branchDeploy.source === 'explicit') {
         branchDeployConfiguration = inputs.branchDeploy.configuration
       } else {
-        const resolution = await dependencies.resolveBranchDeployEvent(
-          context,
-          client
-        )
+        const resolution = dependencies.resolveBranchDeployEvent(context)
         if (!resolution.shouldReconcile) {
           core.setOutput('branch_deploy_reconciled', 'false')
           core.info(`🚦 No branch-deploy reconciliation: ${resolution.reason}`)
@@ -255,15 +253,16 @@ export async function run(
           return 'success'
         }
         prNumber = resolution.prNumber
+        nativeBranchDeployEvent = true
         branchDeployConfiguration = {
           ...inputs.branchDeploy.policy,
           transition: resolution.transition,
           expectedHeadSha: resolution.expectedHeadSha,
-          operationResult: resolution.operationResult
+          operationResult: resolution.operationResult,
+          preserveAdvancedReset: resolution.preserveAdvancedReset
         }
         validateBranchDeployConfiguration(branchDeployConfiguration)
       }
-      core.setOutput('branch_deploy_reconciled', 'true')
     }
 
     if (prNumber === null) {
@@ -321,6 +320,15 @@ export async function run(
             : 'false'
       )
       core.info(`🚦 Branch-deploy state: ${decision.state}`)
+      if (nativeBranchDeployEvent && decision.headMatches === false) {
+        core.setOutput('branch_deploy_reconciled', 'false')
+        core.info(
+          '🚦 No branch-deploy reconciliation: event head no longer matches the pull request head'
+        )
+        core.info('✅ PR Status Action completed successfully')
+        return 'success'
+      }
+      core.setOutput('branch_deploy_reconciled', 'true')
       labelActions = decision
     } else {
       labelActions = dependencies.determineLabelActions(
