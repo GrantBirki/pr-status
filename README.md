@@ -211,8 +211,8 @@ The reusable workflow forwards every action output listed above, including the
 branch-deploy state, live head SHA, head-match result, review data, merge data, CI
 status, and evaluation result.
 
-The caller must grant the permissions used by the reusable workflow because a
-called workflow cannot elevate `GITHUB_TOKEN` permissions:
+The reusable workflow inherits the caller's `GITHUB_TOKEN` permissions and
+cannot elevate them. A label-writing call must grant:
 
 ```yaml
 permissions:
@@ -221,6 +221,9 @@ permissions:
   pull-requests: write
   statuses: read
 ```
+
+For `dry_run: true`, `pull-requests: read` is sufficient because no labels are
+changed. Keep the other read permissions unchanged.
 
 ### Pull request lifecycle events
 

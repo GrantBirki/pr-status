@@ -116,11 +116,6 @@ jobs:
     name: branch-deploy-status
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      checks: read
-      contents: read
-      pull-requests: write
-      statuses: read
     concurrency:
       group: branch-deploy-status-${{ github.repository }}-${{ inputs.pr_number }}
       queue: max

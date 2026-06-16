@@ -190,6 +190,9 @@ combining two label ownership models.
 The reusable workflow checks out `job.workflow_repository` at
 `job.workflow_sha` before using the local action. Preserve that immutable
 self-reference; do not replace it with a mutable branch or major-version tag.
+It inherits the caller's explicitly scoped `GITHUB_TOKEN` permissions so
+read-only dry runs remain possible; non-dry calls require callers to grant
+`pull-requests: write`.
 The workflow serializes branch-deploy state changes per pull request, but correctness
 must continue to come from live PR state, head SHA, reviews, and labels.
 
