@@ -24,9 +24,11 @@ function dependencies(
 
 const baseEnvironment: NodeJS.ProcessEnv = {
   GITHUB_ACTIONS: 'true',
+  GITHUB_EVENT_NAME: 'pull_request',
   GITHUB_EVENT_PATH: '/event.json',
   GITHUB_JOB: 'evaluate',
   GITHUB_REPOSITORY: 'octocat/example',
+  GITHUB_RUN_ATTEMPT: '1'
 }
 
 test('loads repository, job, and pull request context without a workflow name', () => {
@@ -44,6 +46,13 @@ test('loads repository, job, and pull request context without a workflow name', 
     {
       repo: {owner: 'octocat', repo: 'example'},
       job: 'evaluate',
+      eventName: 'pull_request',
+      eventPayload: {
+        number: 3,
+        issue: {number: 2},
+        pull_request: {number: 1}
+      },
+      runAttempt: 1,
       issueNumber: 1
     }
   )
@@ -82,8 +91,10 @@ test('rejects execution outside GitHub Actions', () => {
 test('requires GitHub Actions context variables', () => {
   for (const name of [
     'GITHUB_REPOSITORY',
+    'GITHUB_EVENT_NAME',
     'GITHUB_EVENT_PATH',
-    'GITHUB_JOB'
+    'GITHUB_JOB',
+    'GITHUB_RUN_ATTEMPT'
   ]) {
     const environment = {...baseEnvironment, [name]: ' '}
     assert.throws(
@@ -91,6 +102,28 @@ test('requires GitHub Actions context variables', () => {
       new RegExp(`${name} is required`)
     )
   }
+})
+
+test('requires a positive safe run attempt', () => {
+  for (const runAttempt of ['0', '1.5', 'not-a-number']) {
+    assert.throws(
+      () =>
+        loadActionContext(
+          dependencies({...baseEnvironment, GITHUB_RUN_ATTEMPT: runAttempt})
+        ),
+      /GITHUB_RUN_ATTEMPT must be a positive integer/u
+    )
+  }
+  assert.throws(
+    () =>
+      loadActionContext(
+        dependencies({
+          ...baseEnvironment,
+          GITHUB_RUN_ATTEMPT: '999999999999999999999'
+        })
+      ),
+    /GITHUB_RUN_ATTEMPT must be a positive safe integer/u
+  )
 })
 
 test('rejects malformed repository coordinates', () => {
@@ -121,9 +154,11 @@ test('default context dependencies read the GitHub event file', async () => {
   const eventPath = join(temporaryRoot, 'event.json')
   const names = [
     'GITHUB_ACTIONS',
+    'GITHUB_EVENT_NAME',
     'GITHUB_EVENT_PATH',
     'GITHUB_JOB',
     'GITHUB_REPOSITORY',
+    'GITHUB_RUN_ATTEMPT'
   ] as const
   const originalValues = new Map(
     names.map(name => [name, process.env[name]] as const)
@@ -131,14 +166,19 @@ test('default context dependencies read the GitHub event file', async () => {
 
   await writeFile(eventPath, JSON.stringify({pull_request: {number: 42}}))
   process.env.GITHUB_ACTIONS = 'true'
+  process.env.GITHUB_EVENT_NAME = 'pull_request'
   process.env.GITHUB_EVENT_PATH = eventPath
   process.env.GITHUB_JOB = 'evaluate'
   process.env.GITHUB_REPOSITORY = 'octocat/example'
+  process.env.GITHUB_RUN_ATTEMPT = '2'
 
   try {
     assert.deepEqual(loadActionContext(), {
       repo: {owner: 'octocat', repo: 'example'},
       job: 'evaluate',
+      eventName: 'pull_request',
+      eventPayload: {pull_request: {number: 42}},
+      runAttempt: 2,
       issueNumber: 42
     })
   } finally {

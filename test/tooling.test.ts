@@ -108,15 +108,24 @@ test('branch-deploy-status workflow stays self-contained', async () => {
     actionMetadata,
     /  mode:\n    description: [^\n]+\n    default: status\n    required: false\n/u
   )
-  for (const output of ['branch_deploy_state', 'head_sha', 'head_matches']) {
+  for (const output of [
+    'branch_deploy_reconciled',
+    'branch_deploy_state',
+    'head_sha',
+    'head_matches'
+  ]) {
     assert.match(actionMetadata, new RegExp(`  ${output}:\\n`, 'u'))
   }
 
   assert.match(reusableWorkflow, /  workflow_call:\n/u)
-  assert.match(reusableWorkflow, /default: ready-for-noop/u)
-  assert.match(reusableWorkflow, /default: approved,not_draft/u)
+  assert.match(reusableWorkflow, /default: needs-noop/u)
+  assert.match(
+    reusableWorkflow,
+    /default: approved,min_approvals=1,not_draft/u
+  )
   assert.match(reusableWorkflow, /name: branch-deploy-status/u)
   assert.match(reusableWorkflow, /queue: max/u)
+  assert.match(reusableWorkflow, /inputs\.pr_number/u)
   assert.match(
     reusableWorkflow,
     /repository: \$\{\{ job\.workflow_repository \}\}\n          ref: \$\{\{ job\.workflow_sha \}\}/u
@@ -131,6 +140,7 @@ test('branch-deploy-status workflow stays self-contained', async () => {
     /actions\/checkout@[0-9a-f]{40} # pin@v6/u
   )
   for (const output of [
+    'branch_deploy_reconciled',
     'branch_deploy_state',
     'head_sha',
     'head_matches',
@@ -154,6 +164,8 @@ test('branch-deploy-status workflow stays self-contained', async () => {
     /uses: \.\/\.github\/workflows\/branch-deploy-status\.yml/u
   )
   assert.match(acceptanceWorkflow, /dry_run: true/u)
+  assert.doesNotMatch(acceptanceWorkflow, /transition: reset/u)
+  assert.doesNotMatch(acceptanceWorkflow, /expected_head_sha:/u)
 })
 
 test('lockfile uses public package URLs and no lifecycle scripts', async () => {

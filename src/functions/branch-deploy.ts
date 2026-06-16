@@ -31,14 +31,18 @@ export interface BranchDeployLabels {
   merge: string
 }
 
-export interface BranchDeployConfiguration {
-  transition: BranchDeployTransition
-  expectedHeadSha: string
-  operationResult: OperationResult | null
+export interface BranchDeployPolicy {
   labels: BranchDeployLabels
   clearOnDraft: boolean
   demoteMergeOnReviewFailure: boolean
   dryRun: boolean
+}
+
+export interface BranchDeployConfiguration extends BranchDeployPolicy {
+  transition: BranchDeployTransition
+  expectedHeadSha: string
+  operationResult: OperationResult | null
+  preserveAdvancedReset: boolean
 }
 
 export interface BranchDeployPullRequest {
@@ -113,13 +117,7 @@ export function parseBooleanInput(name: string, value: string): boolean {
 export function validateBranchDeployConfiguration(
   configuration: BranchDeployConfiguration
 ): void {
-  const labels = Object.values(configuration.labels)
-  if (labels.some(label => label.trim() === '')) {
-    throw new Error('branch-deploy labels must not be empty')
-  }
-  if (new Set(labels.map(labelKey)).size !== labels.length) {
-    throw new Error('branch-deploy labels must be distinct')
-  }
+  validateBranchDeployPolicy(configuration)
 
   const headBoundTransition =
     configuration.transition === 'reset' ||
@@ -129,6 +127,18 @@ export function validateBranchDeployConfiguration(
     throw new Error(
       'expected_head_sha is required for reset, noop, and deploy transitions'
     )
+  }
+}
+
+export function validateBranchDeployPolicy(
+  policy: BranchDeployPolicy
+): void {
+  const labels = Object.values(policy.labels)
+  if (labels.some(label => label.trim() === '')) {
+    throw new Error('branch-deploy labels must not be empty')
+  }
+  if (new Set(labels.map(labelKey)).size !== labels.length) {
+    throw new Error('branch-deploy labels must be distinct')
   }
 }
 
@@ -151,7 +161,13 @@ export function determineBranchDeployState(
     state = 'cleared'
   } else if (configuration.transition === 'reset') {
     headMatches = pullRequest.headSha === configuration.expectedHeadSha
-    state = headMatches ? 'noop' : (currentState ?? 'noop')
+    state =
+      headMatches &&
+      (!configuration.preserveAdvancedReset ||
+        currentState === null ||
+        currentState === 'noop')
+        ? 'noop'
+        : (currentState ?? 'noop')
   } else if (configuration.transition === 'clear') {
     state = currentState ?? 'noop'
   } else if (
@@ -161,13 +177,22 @@ export function determineBranchDeployState(
     headMatches = pullRequest.headSha === configuration.expectedHeadSha
     if (!headMatches) {
       state = 'noop'
-    } else if (configuration.operationResult !== 'success') {
-      state =
-        configuration.transition === 'noop' ? 'noop' : 'deploy'
     } else if (configuration.transition === 'noop') {
+      state =
+        configuration.operationResult === 'success'
+          ? evaluationPassed
+            ? 'deploy'
+            : 'review'
+          : 'noop'
+    } else if (configuration.operationResult !== 'success') {
       state = evaluationPassed ? 'deploy' : 'review'
-    } else {
+    } else if (
+      evaluationPassed ||
+      !configuration.demoteMergeOnReviewFailure
+    ) {
       state = 'merge'
+    } else {
+      state = 'review'
     }
   } else if (currentState === null || currentState === 'noop') {
     state = 'noop'

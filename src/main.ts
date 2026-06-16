@@ -16,12 +16,16 @@ import {
   parseBranchDeployTransition,
   parseBooleanInput,
   parseOperationResult,
-  validateBranchDeployConfiguration
+  validateBranchDeployConfiguration,
+  validateBranchDeployPolicy
 } from './functions/branch-deploy.ts'
 import type {
   ActionMode,
-  BranchDeployConfiguration
+  BranchDeployConfiguration,
+  BranchDeployPolicy
 } from './functions/branch-deploy.ts'
+import {resolveBranchDeployEvent as resolveEventTransition} from './functions/branch-deploy-event.ts'
+import type {BranchDeployEventResolution} from './functions/branch-deploy-event.ts'
 import {
   parseCheckSelection,
   parsePullRequestNumber,
@@ -31,6 +35,16 @@ import type {StatusResult} from './functions/status.ts'
 import {stringToArray as parseStringToArray} from './functions/string-to-array.ts'
 import {createGitHubClient} from './github.ts'
 import type {GitHubClient} from './github.ts'
+
+export type BranchDeployInputs =
+  | {
+      source: 'event'
+      policy: BranchDeployPolicy
+    }
+  | {
+      source: 'explicit'
+      configuration: BranchDeployConfiguration
+    }
 
 export interface ActionInputs {
   mode: ActionMode
@@ -42,8 +56,8 @@ export interface ActionInputs {
   passLabelsCleanup: string[]
   failLabels: string[]
   excludeChecks: string[]
-  prNumber: number
-  branchDeploy: BranchDeployConfiguration | null
+  prNumber: number | null
+  branchDeploy: BranchDeployInputs | null
 }
 
 export interface MainDependencies {
@@ -55,6 +69,9 @@ export interface MainDependencies {
   stringToArray: typeof parseStringToArray
   determineLabelActions: typeof selectLabelActions
   determineBranchDeployState: typeof selectBranchDeployState
+  resolveBranchDeployEvent(
+    context: ActionContext
+  ): BranchDeployEventResolution
   label: typeof reconcileLabels
 }
 
@@ -69,6 +86,7 @@ export const defaultDependencies: MainDependencies = {
   stringToArray: parseStringToArray,
   determineLabelActions: selectLabelActions,
   determineBranchDeployState: selectBranchDeployState,
+  resolveBranchDeployEvent: resolveEventTransition,
   label: reconcileLabels
 }
 
@@ -91,12 +109,8 @@ export function parseInputs(
   const failLabels = stringToArray(core.getInput('fail_labels'))
   const excludeChecks = stringToArray(core.getInput('exclude_checks'))
   const inputPullRequestNumber = core.getInput('pr_number')
-  const prNumber = parsePullRequestNumber(
-    inputPullRequestNumber === ''
-      ? context.issueNumber
-      : inputPullRequestNumber
-  )
-  let branchDeploy: BranchDeployConfiguration | null = null
+  let prNumber: number | null = null
+  let branchDeploy: BranchDeployInputs | null = null
 
   parseEvaluationCriteria(evaluations)
   if (mode === 'branch-deploy') {
@@ -110,16 +124,7 @@ export function parseInputs(
       )
     }
 
-    const transition = parseBranchDeployTransition(
-      core.getInput('transition')
-    )
-    branchDeploy = {
-      transition,
-      expectedHeadSha: core.getInput('expected_head_sha'),
-      operationResult: parseOperationResult(
-        core.getInput('operation_result'),
-        transition
-      ),
+    const policy: BranchDeployPolicy = {
       labels: {
         noop: core.getInput('noop_label'),
         review: core.getInput('review_label'),
@@ -136,7 +141,37 @@ export function parseInputs(
       ),
       dryRun: parseBooleanInput('dry_run', core.getInput('dry_run'))
     }
-    validateBranchDeployConfiguration(branchDeploy)
+    validateBranchDeployPolicy(policy)
+
+    const transitionInput = core.getInput('transition')
+    if (transitionInput === '') {
+      branchDeploy = {source: 'event', policy}
+    } else {
+      const transition = parseBranchDeployTransition(transitionInput)
+      const configuration: BranchDeployConfiguration = {
+        ...policy,
+        transition,
+        expectedHeadSha: core.getInput('expected_head_sha'),
+        operationResult: parseOperationResult(
+          core.getInput('operation_result'),
+          transition
+        ),
+        preserveAdvancedReset: false
+      }
+      validateBranchDeployConfiguration(configuration)
+      prNumber = parsePullRequestNumber(
+        inputPullRequestNumber === ''
+          ? context.issueNumber
+          : inputPullRequestNumber
+      )
+      branchDeploy = {source: 'explicit', configuration}
+    }
+  } else {
+    prNumber = parsePullRequestNumber(
+      inputPullRequestNumber === ''
+        ? context.issueNumber
+        : inputPullRequestNumber
+    )
   }
   core.debug('📋 Parsed and validated inputs successfully')
 
@@ -201,13 +236,44 @@ export async function run(
     const context = dependencies.loadContext()
     const inputs = parseInputs(dependencies, context)
     token = inputs.token
-    core.info(`🔍 Evaluating PR #${inputs.prNumber}`)
-
     const client = dependencies.createClient(inputs.token)
+    let prNumber = inputs.prNumber
+    let branchDeployConfiguration: BranchDeployConfiguration | null = null
+    let nativeBranchDeployEvent = false
+
+    if (inputs.branchDeploy !== null) {
+      if (inputs.branchDeploy.source === 'explicit') {
+        branchDeployConfiguration = inputs.branchDeploy.configuration
+      } else {
+        const resolution = dependencies.resolveBranchDeployEvent(context)
+        if (!resolution.shouldReconcile) {
+          core.setOutput('branch_deploy_reconciled', 'false')
+          core.info(`🚦 No branch-deploy reconciliation: ${resolution.reason}`)
+          core.info('✅ PR Status Action completed successfully')
+          return 'success'
+        }
+        prNumber = resolution.prNumber
+        nativeBranchDeployEvent = true
+        branchDeployConfiguration = {
+          ...inputs.branchDeploy.policy,
+          transition: resolution.transition,
+          expectedHeadSha: resolution.expectedHeadSha,
+          operationResult: resolution.operationResult,
+          preserveAdvancedReset: resolution.preserveAdvancedReset
+        }
+        validateBranchDeployConfiguration(branchDeployConfiguration)
+      }
+    }
+
+    if (prNumber === null) {
+      throw new Error('pull request number could not be resolved')
+    }
+    core.info(`🔍 Evaluating PR #${prNumber}`)
+
     const statusResult: StatusResult = await dependencies.status(
       client,
       context,
-      inputs.prNumber,
+      prNumber,
       {
         checks: inputs.checks,
         excludeChecks: inputs.excludeChecks,
@@ -228,11 +294,11 @@ export async function run(
 
     if (inputs.mode === 'branch-deploy') {
       const branchDeploy =
-        inputs.branchDeploy as BranchDeployConfiguration
+        branchDeployConfiguration as BranchDeployConfiguration
       currentLabels = await client.listIssueLabels({
         owner: context.repo.owner,
         repo: context.repo.repo,
-        number: inputs.prNumber
+        number: prNumber
       })
       const decision = dependencies.determineBranchDeployState({
         configuration: branchDeploy,
@@ -254,6 +320,15 @@ export async function run(
             : 'false'
       )
       core.info(`🚦 Branch-deploy state: ${decision.state}`)
+      if (nativeBranchDeployEvent && decision.headMatches === false) {
+        core.setOutput('branch_deploy_reconciled', 'false')
+        core.info(
+          '🚦 No branch-deploy reconciliation: event head no longer matches the pull request head'
+        )
+        core.info('✅ PR Status Action completed successfully')
+        return 'success'
+      }
+      core.setOutput('branch_deploy_reconciled', 'true')
       labelActions = decision
     } else {
       labelActions = dependencies.determineLabelActions(
@@ -268,11 +343,11 @@ export async function run(
       labelActions.labelsToRemove,
       core
     )
-    if (inputs.branchDeploy?.dryRun === true) {
+    if (branchDeployConfiguration?.dryRun === true) {
       core.info('🏷️ Dry run enabled; branch-deploy labels were not changed')
     } else {
       await dependencies.label(
-        inputs.prNumber,
+        prNumber,
         context,
         client,
         labelActions.labelsToAdd,

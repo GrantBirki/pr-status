@@ -30,6 +30,7 @@ function configuration(
     transition: 'review',
     expectedHeadSha: '',
     operationResult: null,
+    preserveAdvancedReset: false,
     labels,
     clearOnDraft: true,
     demoteMergeOnReviewFailure: true,
@@ -227,11 +228,28 @@ test('reset, clear, and review transitions use current live state', () => {
   assert.equal(
     determineBranchDeployState(
       data({
+        configuration: {
+          transition: 'reset',
+          expectedHeadSha: 'old-head'
+        }
+      })
+    ).state,
+    'noop'
+  )
+  assert.equal(
+    determineBranchDeployState(
+      data({
         configuration: {transition: 'clear'},
         currentLabels: [labels.deploy]
       })
     ).state,
     'deploy'
+  )
+  assert.equal(
+    determineBranchDeployState(
+      data({configuration: {transition: 'clear'}})
+    ).state,
+    'noop'
   )
 
   assert.equal(determineBranchDeployState(data()).state, 'noop')
@@ -279,6 +297,44 @@ test('reset, clear, and review transitions use current live state', () => {
     ).state,
     'merge'
   )
+})
+
+test('replayed resets preserve advanced states and repair initial states', () => {
+  for (const [currentLabel, expectedState] of [
+    [labels.review, 'review'],
+    [labels.deploy, 'deploy'],
+    [labels.merge, 'merge']
+  ] as const) {
+    const decision = determineBranchDeployState(
+      data({
+        configuration: {
+          transition: 'reset',
+          expectedHeadSha: 'abc123',
+          preserveAdvancedReset: true
+        },
+        currentLabels: [currentLabel]
+      })
+    )
+    assert.equal(decision.state, expectedState)
+    assert.deepEqual(decision.labelsToAdd, [])
+    assert.deepEqual(decision.labelsToRemove, [])
+  }
+
+  for (const currentLabels of [[], [labels.noop]]) {
+    assert.equal(
+      determineBranchDeployState(
+        data({
+          configuration: {
+            transition: 'reset',
+            expectedHeadSha: 'abc123',
+            preserveAdvancedReset: true
+          },
+          currentLabels
+        })
+      ).state,
+      'noop'
+    )
+  }
 })
 
 test('conflicting labels select the least-advanced state before review', () => {
@@ -388,7 +444,29 @@ test('deploy transitions converge failed and successful commands', () => {
       determineBranchDeployState(command('deploy', result)).state,
       'deploy'
     )
+    assert.equal(
+      determineBranchDeployState(
+        command('deploy', result, {evaluationPassed: false})
+      ).state,
+      'review'
+    )
   }
+
+  assert.equal(
+    determineBranchDeployState(
+      command('deploy', 'success', {evaluationPassed: false})
+    ).state,
+    'review'
+  )
+  assert.equal(
+    determineBranchDeployState(
+      command('deploy', 'success', {
+        evaluationPassed: false,
+        configuration: {demoteMergeOnReviewFailure: false}
+      })
+    ).state,
+    'merge'
+  )
 
   assert.equal(
     determineBranchDeployState(

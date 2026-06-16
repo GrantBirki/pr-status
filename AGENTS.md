@@ -128,7 +128,8 @@ Current inputs:
   branch-deploy-status label reconciliation.
 - `workflow`: exact, case-sensitive current job/check name to exclude from CI
   evaluation. Its metadata default is `${{ github.job }}`.
-- `pr_number`: pull request number, with event-context fallback behavior.
+- `pr_number`: pull request number, with event-context fallback behavior;
+  branch-deploy mode can resolve supported caller events when it is omitted.
 - `checks`: selects `required` checks or all checks.
 - `evaluations`: comma-separated evaluation criteria.
 - `pass_labels`: labels added when evaluation passes.
@@ -136,7 +137,7 @@ Current inputs:
 - `fail_labels`: labels added when evaluation fails.
 - `exclude_checks`: additional exact, case-sensitive check names excluded from
   CI status evaluation.
-- Branch-deploy mode inputs: `transition`, `expected_head_sha`,
+- Branch-deploy mode inputs: optional explicit `transition`, `expected_head_sha`,
   `operation_result`, the four branch-deploy label names, `clear_on_draft`,
   `demote_merge_on_review_failure`, and `dry_run`.
 
@@ -156,6 +157,7 @@ the mechanism for excluding other checks.
 
 Current outputs:
 
+- `branch_deploy_reconciled`
 - `branch_deploy_state`
 - `head_sha`
 - `head_matches`
@@ -193,8 +195,10 @@ self-reference; do not replace it with a mutable branch or major-version tag.
 It inherits the caller's explicitly scoped `GITHUB_TOKEN` permissions so
 read-only dry runs remain possible; non-dry calls require callers to grant
 `pull-requests: write`.
-The workflow serializes branch-deploy state changes per pull request, but correctness
-must continue to come from live PR state, head SHA, reviews, and labels.
+The workflow serializes branch-deploy state changes per pull request. Native
+lifecycle events are resolved from the caller event, while command results use
+explicit inputs from a dependent branch-deploy job. Correctness must continue
+to come from live PR state, head SHA, reviews, operation freshness, and labels.
 
 When changing any public input, output, evaluation, or label behavior, update all
 of the following together:
@@ -213,7 +217,8 @@ otherwise:
 
 1. Read and validate action inputs and GitHub Actions context.
 2. Resolve repository and pull request context from documented GitHub Actions
-   environment variables and event payload data.
+   environment variables and event payload data. In native branch-deploy mode,
+   resolve supported lifecycle events before querying pull request state.
 3. Resolve the exact current job/check name from a nonempty explicit `workflow`
    input or the required `GITHUB_JOB` context fallback.
 4. Validate configuration before making an API request.
@@ -469,7 +474,6 @@ The client must:
 - Limit logged response excerpts to 4 KiB and redact the token defensively.
 - Paginate at 100 nodes or records per page, reject repeated cursors or pages,
   and fail after 100 pages or 10,000 nodes.
-
 Do not broaden workflow permissions to compensate for client errors. The README
 and acceptance workflow should continue to demonstrate least-privilege
 permissions.
@@ -517,6 +521,8 @@ Include:
 - Empty checks, missing rollups, unknown statuses, skipped or neutral checks,
   and pending or failing checks.
 - Every evaluation criterion and malformed `min_approvals` forms.
+- Native branch-deploy lifecycle event resolution, malformed payloads, stale
+  event heads, replayed resets, explicit command results, and review races.
 - Output serialization, including `null`, booleans, and zero.
 - Label add, remove, no-op, overlap, retry, and failure paths.
 - PASS and FAIL label selection.

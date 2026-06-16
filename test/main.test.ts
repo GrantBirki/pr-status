@@ -24,6 +24,12 @@ import {createRecordingCore} from './functions/helpers.ts'
 const context: ActionContext = {
   repo: {owner: 'octocat', repo: 'example'},
   job: 'evaluate',
+  eventName: 'pull_request',
+  eventPayload: {
+    action: 'synchronize',
+    pull_request: {number: 42, head: {sha: 'abc123'}}
+  },
+  runAttempt: 1,
   issueNumber: 42
 }
 
@@ -141,6 +147,9 @@ function createRunFixture(
     stringToArray,
     determineLabelActions,
     determineBranchDeployState,
+    resolveBranchDeployEvent() {
+      throw new Error('Unexpected branch-deploy event resolution')
+    },
     async label(
       number,
       receivedContext,
@@ -362,18 +371,22 @@ test('parseInputs loads branch-deploy defaults and policy overrides', () => {
     )
 
   assert.deepEqual(parse({transition: 'review'}).branchDeploy, {
-    transition: 'review',
-    expectedHeadSha: '',
-    operationResult: null,
-    labels: {
-      noop: 'ready-for-noop',
-      review: 'ready-for-review',
-      deploy: 'ready-for-deployment',
-      merge: 'ready-to-merge'
-    },
-    clearOnDraft: true,
-    demoteMergeOnReviewFailure: true,
-    dryRun: false
+    source: 'explicit',
+    configuration: {
+      transition: 'review',
+      expectedHeadSha: '',
+      operationResult: null,
+      preserveAdvancedReset: false,
+      labels: {
+        noop: 'ready-for-noop',
+        review: 'ready-for-review',
+        deploy: 'ready-for-deployment',
+        merge: 'ready-to-merge'
+      },
+      clearOnDraft: true,
+      demoteMergeOnReviewFailure: true,
+      dryRun: false
+    }
   })
 
   assert.deepEqual(
@@ -390,24 +403,44 @@ test('parseInputs loads branch-deploy defaults and policy overrides', () => {
       dry_run: 'true'
     }).branchDeploy,
     {
-      transition: 'deploy',
-      expectedHeadSha: 'abc123',
-      operationResult: 'failure',
-      labels: {
-        noop: 'noop',
-        review: 'review',
-        deploy: 'deploy',
-        merge: 'merge'
-      },
-      clearOnDraft: false,
-      demoteMergeOnReviewFailure: false,
-      dryRun: true
+      source: 'explicit',
+      configuration: {
+        transition: 'deploy',
+        expectedHeadSha: 'abc123',
+        operationResult: 'failure',
+        preserveAdvancedReset: false,
+        labels: {
+          noop: 'noop',
+          review: 'review',
+          deploy: 'deploy',
+          merge: 'merge'
+        },
+        clearOnDraft: false,
+        demoteMergeOnReviewFailure: false,
+        dryRun: true
+      }
     }
   )
   assert.throws(
     () => parse({transition: 'review', noop_label: ''}),
     /branch-deploy labels must not be empty/
   )
+
+  assert.deepEqual(parse({transition: '', pr_number: ''}).branchDeploy, {
+    source: 'event',
+    policy: {
+      labels: {
+        noop: 'ready-for-noop',
+        review: 'ready-for-review',
+        deploy: 'ready-for-deployment',
+        merge: 'ready-to-merge'
+      },
+      clearOnDraft: true,
+      demoteMergeOnReviewFailure: true,
+      dryRun: false
+    }
+  })
+  assert.equal(parse({transition: '', pr_number: ''}).prNumber, null)
 })
 
 test('label action logging covers additions, removals, and no-op results', () => {
@@ -487,6 +520,144 @@ test('run reconciles branch-deploy labels from live state', async () => {
   ])
   assert.equal(fixture.recording.outputs.get('branch_deploy_state'), 'deploy')
   assert.equal(fixture.recording.outputs.get('head_matches'), 'true')
+})
+
+test('run resolves branch-deploy transitions from the caller event', async () => {
+  const fixture = createRunFixture(true, {
+    mode: 'branch-deploy',
+    transition: '',
+    pr_number: '',
+    pass_labels: '',
+    pass_labels_cleanup: '',
+    fail_labels: ''
+  })
+  fixture.dependencies.resolveBranchDeployEvent = receivedContext => {
+    fixture.callOrder.push('resolve')
+    assert.equal(receivedContext, context)
+    return {
+      shouldReconcile: true,
+      transition: 'reset',
+      prNumber: 42,
+      expectedHeadSha: 'abc123',
+      operationResult: null,
+      preserveAdvancedReset: false
+    }
+  }
+
+  assert.equal(await run(fixture.dependencies), 'success')
+  assert.deepEqual(fixture.callOrder, [
+    'context',
+    'client',
+    'resolve',
+    'status',
+    'outputs',
+    'labels'
+  ])
+  assert.deepEqual(fixture.labelActions, [
+    {add: ['ready-for-noop'], remove: []}
+  ])
+  assert.equal(
+    fixture.recording.outputs.get('branch_deploy_reconciled'),
+    'true'
+  )
+})
+
+test('run succeeds without API evaluation when an event is not actionable', async () => {
+  const fixture = createRunFixture(true, {
+    mode: 'branch-deploy',
+    transition: '',
+    pr_number: '',
+    pass_labels: '',
+    pass_labels_cleanup: '',
+    fail_labels: ''
+  })
+  fixture.dependencies.resolveBranchDeployEvent = () => {
+    fixture.callOrder.push('resolve')
+    return {
+      shouldReconcile: false,
+      reason: 'no matching command'
+    }
+  }
+
+  assert.equal(await run(fixture.dependencies), 'success')
+  assert.deepEqual(fixture.callOrder, ['context', 'client', 'resolve'])
+  assert.deepEqual(fixture.labelActions, [])
+  assert.equal(
+    fixture.recording.outputs.get('branch_deploy_reconciled'),
+    'false'
+  )
+  assert.ok(
+    fixture.recording.info.some(message =>
+      message.includes('no matching command')
+    )
+  )
+})
+
+test('run ignores a native reset for a stale event head', async () => {
+  const fixture = createRunFixture(
+    true,
+    {
+      mode: 'branch-deploy',
+      transition: '',
+      pr_number: '',
+      pass_labels: '',
+      pass_labels_cleanup: '',
+      fail_labels: ''
+    },
+    ['ready-for-review']
+  )
+  fixture.dependencies.resolveBranchDeployEvent = () => {
+    fixture.callOrder.push('resolve')
+    return {
+      shouldReconcile: true,
+      transition: 'reset',
+      prNumber: 42,
+      expectedHeadSha: 'old-head',
+      operationResult: null,
+      preserveAdvancedReset: false
+    }
+  }
+
+  assert.equal(await run(fixture.dependencies), 'success')
+  assert.deepEqual(fixture.callOrder, [
+    'context',
+    'client',
+    'resolve',
+    'status',
+    'outputs'
+  ])
+  assert.deepEqual(fixture.labelActions, [])
+  assert.equal(fixture.recording.outputs.get('branch_deploy_state'), 'review')
+  assert.equal(fixture.recording.outputs.get('head_matches'), 'false')
+  assert.equal(
+    fixture.recording.outputs.get('branch_deploy_reconciled'),
+    'false'
+  )
+})
+
+test('run fails when event resolution does not provide a pull request number', async () => {
+  const fixture = createRunFixture(true, {
+    mode: 'branch-deploy',
+    transition: '',
+    pr_number: '',
+    pass_labels: '',
+    pass_labels_cleanup: '',
+    fail_labels: ''
+  })
+  fixture.dependencies.resolveBranchDeployEvent = () => ({
+    shouldReconcile: true,
+    transition: 'review',
+    prNumber: null as unknown as number,
+    expectedHeadSha: '',
+    operationResult: null,
+    preserveAdvancedReset: false
+  })
+
+  assert.equal(await run(fixture.dependencies), 'failure')
+  assert.match(
+    String(fixture.recording.failed[0]),
+    /pull request number could not be resolved/u
+  )
 })
 
 test('run reports non-command dry runs without mutating labels', async () => {
@@ -591,11 +762,13 @@ test('native bundled-style entrypoint executes with read-only API behavior', asy
   const restoreEnvironment = setEnvironment({
     GITHUB_ACTIONS: 'true',
     GITHUB_API_URL: 'https://api.github.com',
+    GITHUB_EVENT_NAME: 'pull_request',
     GITHUB_EVENT_PATH: eventPath,
     GITHUB_GRAPHQL_URL: 'https://api.github.com/graphql',
     GITHUB_JOB: 'integration',
     GITHUB_OUTPUT: outputPath,
     GITHUB_REPOSITORY: 'octocat/example',
+    GITHUB_RUN_ATTEMPT: '1',
     INPUT_GITHUB_TOKEN: 'synthetic-entrypoint-value',
     INPUT_WORKFLOW: '',
     INPUT_CHECKS: 'all',

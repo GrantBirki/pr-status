@@ -24,7 +24,7 @@ endpoints and does not claim support for self-hosted HTTP proxies.
 | ----- | --------- | ------- | ----------- |
 | `github_token` | `true` | `${{ github.token }}` | The GitHub.com token used to read pull request state and, when labels are configured, update labels |
 | `mode` | `false` | `status` | Exactly `status` for the existing evaluation behavior or `branch-deploy` for exact branch-deploy-status label reconciliation |
-| `pr_number` | `true` | `${{ github.event.number }}` | A positive integer identifying the pull request to evaluate |
+| `pr_number` | `false` | - | A positive integer identifying the pull request to evaluate. Status mode falls back to the event pull request or issue; branch-deploy mode resolves supported caller events when `transition` is omitted. |
 | `workflow` | `false` | `${{ github.job }}` | The exact, case-sensitive current job/check name to exclude so the action does not evaluate itself. Override it when GitHub reports a custom, matrix, or reusable-workflow check name. |
 | `checks` | `true` | `all` | Exactly `all` or `required`, selecting which CI checks to evaluate |
 | `evaluations` | `false` | `approved` | A case-sensitive comma-separated list containing `approved`, `ci_passing`, `mergeable`, `not_draft`, or `min_approvals=N`. An explicitly empty value evaluates to `PASS`. |
@@ -32,10 +32,10 @@ endpoints and does not claim support for self-hosted HTTP proxies.
 | `pass_labels_cleanup` | `false` | - | An optional list of labels to "clean up" (remove) if the pull request passes evaluation - Examples: `"ready-for-review,waiting"` |
 | `fail_labels` | `false` | - | An optional list of labels to apply to the pull request if the evaluation fails - Examples: `"needs-help,ci-failing,needs-review"` |
 | `exclude_checks` | `false` | - | A case-sensitive comma-separated list of exact check names to exclude from CI status evaluation |
-| `transition` | `false` | - | In branch-deploy mode, exactly `reset`, `review`, `noop`, `deploy`, or `clear` |
+| `transition` | `false` | - | In branch-deploy mode, exactly `reset`, `review`, `noop`, `deploy`, or `clear`. Providing it selects explicit-input mode; omit it to resolve a supported caller event. |
 | `expected_head_sha` | `false` | - | In branch-deploy mode, the pull request head SHA observed by a reset, noop, or deploy transition; required for those transitions |
 | `operation_result` | `false` | - | In branch-deploy mode, exactly `success`, `failure`, `cancelled`, or `skipped` for noop and deploy transitions |
-| `noop_label` | `false` | `ready-for-noop` | Branch-deploy label for a pull request waiting for noop |
+| `noop_label` | `false` | `ready-for-noop` | Branch-deploy label for a pull request waiting for noop. The reusable workflow overrides this with `needs-noop`. |
 | `review_label` | `false` | `ready-for-review` | Branch-deploy label for a pull request waiting for review |
 | `deploy_label` | `false` | `ready-for-deployment` | Branch-deploy label for a pull request waiting for deployment |
 | `merge_label` | `false` | `ready-to-merge` | Branch-deploy label for a pull request waiting to merge |
@@ -56,6 +56,7 @@ action step instead of producing an evaluation result.
 
 | Output | Description |
 | ------ | ----------- |
+| `branch_deploy_reconciled` | In branch-deploy mode, `true` when the caller event was reconciled and `false` when it was intentionally ignored |
 | `branch_deploy_state` | In branch-deploy mode, exactly `cleared`, `noop`, `review`, `deploy`, or `merge` |
 | `head_sha` | The current pull request head commit SHA |
 | `head_matches` | In branch-deploy mode, `true` when `expected_head_sha` matches the live head for reset, noop, or deploy, `false` when stale, and empty otherwise |
@@ -183,7 +184,7 @@ caller-configurable branch-deploy labels:
 
 | State | Default label | Meaning |
 | ----- | ------------- | ------- |
-| `noop` | `ready-for-noop` | The current head still needs a successful noop |
+| `noop` | `needs-noop` | The current head still needs a successful noop |
 | `review` | `ready-for-review` | Noop succeeded and review policy is not satisfied |
 | `deploy` | `ready-for-deployment` | Review policy is satisfied and deployment is pending |
 | `merge` | `ready-to-merge` | Deployment succeeded against the current head |
@@ -191,18 +192,23 @@ caller-configurable branch-deploy labels:
 Closed and merged pull requests have no managed label. A `clear` transition
 reconciles that live state but does not erase labels if a stale closure event
 runs after the pull request has reopened. Draft pull requests are also cleared
-by default; set `clear_on_draft: false` to retain a branch-deploy state. A stale
-reset preserves the live state, while stale noop or deploy results return to `noop`.
-Failed, cancelled, or skipped noops return to `noop`; the same deployment
-outcomes return to `deploy`. Review events cannot promote a `noop` pull
-request before a successful noop. Unrelated labels are never changed.
+by default; set `clear_on_draft: false` to retain a branch-deploy state. Native
+lifecycle events for an old head are ignored, while stale explicit noop or
+deploy results return to `noop`. A rerun preserves an advanced state but can
+repair a missing or initial state. Failed, cancelled, or skipped noops return
+to `noop`. Deployment outcomes return to `deploy` only while review policy
+passes; otherwise they return to `review`. A successful deployment reaches
+`merge` only while review policy passes unless merge demotion is disabled.
+Review events cannot promote a `noop` pull request before a successful noop.
+Unrelated labels are never changed.
 
 The four configured labels must already exist, must be nonempty, and must be
 distinct. Branch-deploy mode cannot be combined with `pass_labels`,
 `pass_labels_cleanup`, or `fail_labels`. Use `dry_run: true` to inspect outputs
 without changing labels.
 
-The reusable workflow defaults to `approved,not_draft`. Override `evaluations`
+The reusable workflow defaults to `approved,min_approvals=1,not_draft`.
+Override `evaluations`
 to add policy such as `min_approvals=2` or `ci_passing`. When using
 `ci_passing`, pass the exact reusable-workflow check name through `workflow` if
 the default job ID does not match the reported check name.
@@ -225,11 +231,11 @@ permissions:
 For `dry_run: true`, `pull-requests: read` is sufficient because no labels are
 changed. Keep the other read permissions unchanged.
 
-### Pull request lifecycle events
+### Native branch-deploy events
 
-Use explicit transitions so the workflow never guesses what an event means.
-The same reusable workflow can be called from separate jobs for reset, review,
-and clear events:
+The reusable workflow resolves supported caller events inside the action, so
+the lifecycle caller needs one job and no inputs. It handles pull request
+lifecycle and review events directly.
 
 ```yaml
 name: branch-deploy-status
@@ -247,35 +253,21 @@ permissions:
   statuses: read
 
 jobs:
-  reset:
-    if: ${{ github.event_name == 'pull_request' && contains(fromJSON('["opened","reopened","synchronize","ready_for_review"]'), github.event.action) }}
+  branch-deploy-status:
     uses: GrantBirki/pr-status/.github/workflows/branch-deploy-status.yml@vX.X.X # <-- replace with the latest version
-    with:
-      transition: reset
-      pr_number: ${{ github.event.pull_request.number }}
-      expected_head_sha: ${{ github.event.pull_request.head.sha }}
-
-  review:
-    if: ${{ github.event_name == 'pull_request_review' }}
-    uses: GrantBirki/pr-status/.github/workflows/branch-deploy-status.yml@vX.X.X # <-- replace with the latest version
-    with:
-      transition: review
-      pr_number: ${{ github.event.pull_request.number }}
-
-  clear:
-    if: ${{ github.event_name == 'pull_request' && contains(fromJSON('["converted_to_draft","closed"]'), github.event.action) }}
-    uses: GrantBirki/pr-status/.github/workflows/branch-deploy-status.yml@vX.X.X # <-- replace with the latest version
-    with:
-      transition: clear
-      pr_number: ${{ github.event.pull_request.number }}
 ```
+
+The action compares the event head with the live pull request head before a
+reset. It ignores stale lifecycle events. When an old workflow run is replayed,
+`GITHUB_RUN_ATTEMPT` lets the action preserve an advanced state while still
+repairing an absent or initial state.
 
 ### Noop and deploy results
 
-Command reconciliation must run as a dependent job so it observes the final
-operation result and selected SHA. Export the operation's pull request number,
-head SHA, mode, and continuation decision as job outputs, then call the
-reusable workflow with `always()`:
+Command reconciliation runs as a dependent job because action outputs do not
+cross workflow boundaries automatically. Export the accepted operation's pull
+request number, head SHA, mode, selected ref, and explicit-SHA value, then pass
+the final job result to the reusable workflow:
 
 ```yaml
 jobs:
@@ -285,14 +277,22 @@ jobs:
       continue: ${{ steps.operation.outputs.continue }}
       noop: ${{ steps.operation.outputs.noop }}
       pr_number: ${{ steps.operation.outputs.issue_number }}
+      ref: ${{ steps.operation.outputs.ref }}
       sha: ${{ steps.operation.outputs.sha }}
+      sha_deployment: ${{ steps.operation.outputs.sha_deployment }}
     steps:
       - id: operation
         uses: github/branch-deploy@0123456789012345678901234567890123456789
 
   branch-deploy-status:
     needs: operation
-    if: ${{ always() && needs.operation.outputs.continue == 'true' }}
+    if: >-
+      ${{
+        always() &&
+        needs.operation.outputs.continue == 'true' &&
+        needs.operation.outputs.sha_deployment == '' &&
+        needs.operation.outputs.ref != github.event.repository.default_branch
+      }}
     permissions:
       checks: read
       contents: read
@@ -305,6 +305,20 @@ jobs:
       expected_head_sha: ${{ needs.operation.outputs.sha }}
       operation_result: ${{ needs.operation.result }}
 ```
+
+The guard intentionally ignores stable-branch and explicit-SHA operations,
+which do not describe the current pull request head. Reconciliation queries
+the live review policy after the operation finishes, so approval changes that
+race with a deployment result converge to the correct current state. Help,
+lock, unlock, and rejected commands have an empty `continue` output and do not
+run the dependent job. The action never checks out or executes pull request
+code.
+
+Public fork pull requests receive a read-only `GITHUB_TOKEN` for
+`pull_request` and `pull_request_review` workflows. Native lifecycle label
+updates therefore require a same-repository pull request or a separately
+reviewed privileged event design. Do not switch this example to
+`pull_request_target` merely to obtain write permissions.
 
 Pin production callers to the immutable full commit SHA for the selected
 release. The reusable workflow checks out and executes its own exact defining
