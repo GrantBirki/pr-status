@@ -11,6 +11,8 @@ import {createRecordingCore, includesMessage} from './helpers.ts'
 
 function createStatus(overrides: Partial<StatusResult> = {}): StatusResult {
   return {
+    pull_request_state: 'OPEN',
+    head_sha: 'abc123',
     review_decision: 'APPROVED',
     total_approvals: 2,
     merge_state_status: 'CLEAN',
@@ -144,6 +146,7 @@ test('sets every output and passes all satisfied criteria', () => {
 
   assert.equal(passed, true)
   assert.deepEqual(Object.fromEntries(recording.outputs), {
+    head_sha: 'abc123',
     review_decision: 'APPROVED',
     total_approvals: 2,
     merge_state_status: 'CLEAN',

@@ -29,6 +29,8 @@ export interface StatusData {
 }
 
 export interface StatusResult {
+  pull_request_state: PullRequestStatus['state']
+  head_sha: string
   review_decision: string | null
   total_approvals: number
   merge_state_status: string
@@ -192,6 +194,8 @@ export async function status(
     data.currentCheckName
   )
   const result: StatusResult = {
+    pull_request_state: pullRequest.state,
+    head_sha: pullRequest.headRefOid,
     review_decision: pullRequest.reviewDecision,
     total_approvals: countUniqueApprovals(pullRequest.latestReviews),
     merge_state_status: pullRequest.mergeStateStatus,
@@ -201,6 +205,8 @@ export async function status(
   }
 
   core.info(`📊 Merge State Status: ${result.merge_state_status}`)
+  core.info(`📊 Pull Request State: ${result.pull_request_state}`)
+  core.info(`📊 Head SHA: ${result.head_sha}`)
   core.info(`📊 Mergeable State: ${result.mergeable_state}`)
   core.info(`📊 Is Draft: ${result.is_draft}`)
   core.info(`📊 Commit Status: ${result.commit_status}`)

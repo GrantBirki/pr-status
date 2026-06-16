@@ -23,6 +23,8 @@ const PULL_REQUEST_STATUS_QUERY = `query(
 ) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
+      state
+      headRefOid
       reviewDecision
       mergeStateStatus
       mergeable
@@ -100,6 +102,8 @@ export interface GitHubReview {
 }
 
 export interface PullRequestStatus {
+  state: 'OPEN' | 'CLOSED' | 'MERGED'
+  headRefOid: string
   reviewDecision: string | null
   mergeStateStatus: string
   mergeable: string
@@ -216,6 +220,18 @@ function requireBoolean(value: unknown, path: string): boolean {
     throw new Error(`Malformed GitHub response: ${path} must be a boolean`)
   }
   return value
+}
+
+function requirePullRequestState(
+  value: unknown,
+  path: string
+): PullRequestStatus['state'] {
+  if (value === 'OPEN' || value === 'CLOSED' || value === 'MERGED') {
+    return value
+  }
+  throw new Error(
+    `Malformed GitHub response: ${path} must be OPEN, CLOSED, or MERGED`
+  )
 }
 
 function sanitizeExcerpt(value: string, token: string): string {
@@ -476,6 +492,14 @@ function parsePullRequestPage(
 
   return {
     metadata: {
+      state: requirePullRequestState(
+        pullRequest.state,
+        'data.repository.pullRequest.state'
+      ),
+      headRefOid: requireString(
+        pullRequest.headRefOid,
+        'data.repository.pullRequest.headRefOid'
+      ),
       reviewDecision: requireNullableString(
         pullRequest.reviewDecision,
         'data.repository.pullRequest.reviewDecision'

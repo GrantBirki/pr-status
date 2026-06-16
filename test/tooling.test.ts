@@ -87,6 +87,75 @@ test('action metadata defaults self-exclusion to the current job', async () => {
   assert.doesNotMatch(actionMetadata, /github\.workflow/u)
 })
 
+test('branch-deploy-status workflow stays self-contained', async () => {
+  const actionMetadata = await readFile(
+    new URL('action.yml', repositoryRoot),
+    'utf8'
+  )
+  const reusableWorkflow = await readFile(
+    new URL(
+      '.github/workflows/branch-deploy-status.yml',
+      repositoryRoot
+    ),
+    'utf8'
+  )
+  const acceptanceWorkflow = await readFile(
+    new URL('.github/workflows/acceptance.yml', repositoryRoot),
+    'utf8'
+  )
+
+  assert.match(
+    actionMetadata,
+    /  mode:\n    description: [^\n]+\n    default: status\n    required: false\n/u
+  )
+  for (const output of ['branch_deploy_state', 'head_sha', 'head_matches']) {
+    assert.match(actionMetadata, new RegExp(`  ${output}:\\n`, 'u'))
+  }
+
+  assert.match(reusableWorkflow, /  workflow_call:\n/u)
+  assert.match(reusableWorkflow, /default: ready-for-noop/u)
+  assert.match(reusableWorkflow, /default: approved,not_draft/u)
+  assert.match(reusableWorkflow, /name: branch-deploy-status/u)
+  assert.match(reusableWorkflow, /queue: max/u)
+  assert.match(
+    reusableWorkflow,
+    /repository: \$\{\{ job\.workflow_repository \}\}\n          ref: \$\{\{ job\.workflow_sha \}\}/u
+  )
+  assert.match(reusableWorkflow, /uses: \.\/pr-status-action/u)
+  assert.doesNotMatch(
+    reusableWorkflow,
+    /uses: GrantBirki\/pr-status@/u
+  )
+  assert.match(
+    reusableWorkflow,
+    /actions\/checkout@[0-9a-f]{40} # pin@v6/u
+  )
+  for (const output of [
+    'branch_deploy_state',
+    'head_sha',
+    'head_matches',
+    'evaluation',
+    'approved',
+    'total_approvals',
+    'review_decision',
+    'merge_state_status',
+    'mergeable_state',
+    'commit_status',
+    'is_draft'
+  ]) {
+    assert.match(
+      reusableWorkflow,
+      new RegExp(`${output}: \\$\\{\\{ steps\\.pr-status\\.outputs\\.${output} \\}\\}`, 'u')
+    )
+  }
+
+  assert.match(
+    acceptanceWorkflow,
+    /uses: \.\/\.github\/workflows\/branch-deploy-status\.yml/u
+  )
+  assert.match(acceptanceWorkflow, /dry_run: true/u)
+})
+
 test('lockfile uses public package URLs and no lifecycle scripts', async () => {
   const packageLock = JSON.parse(
     await readFile(new URL('package-lock.json', repositoryRoot), 'utf8')

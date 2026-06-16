@@ -8,6 +8,7 @@ import type {ActionsApi, InputOptions} from '../src/actions.ts'
 import type {ActionContext} from '../src/context.ts'
 import {determineLabelActions} from '../src/functions/label.ts'
 import type {LabelResult} from '../src/functions/label.ts'
+import {determineBranchDeployState} from '../src/functions/branch-deploy.ts'
 import type {StatusResult} from '../src/functions/status.ts'
 import {stringToArray} from '../src/functions/string-to-array.ts'
 import type {GitHubClient} from '../src/github.ts'
@@ -27,6 +28,8 @@ const context: ActionContext = {
 }
 
 const statusResult: StatusResult = {
+  pull_request_state: 'OPEN',
+  head_sha: 'abc123',
   review_decision: 'APPROVED',
   total_approvals: 2,
   merge_state_status: 'CLEAN',
@@ -35,13 +38,13 @@ const statusResult: StatusResult = {
   commit_status: 'SUCCESS'
 }
 
-function clientStub(): GitHubClient {
+function clientStub(currentLabels: readonly string[] = []): GitHubClient {
   return {
     async getPullRequestStatus() {
       throw new Error('Unexpected status request')
     },
     async listIssueLabels() {
-      throw new Error('Unexpected label request')
+      return [...currentLabels]
     },
     async removeLabel(): Promise<void> {
       throw new Error('Unexpected label removal')
@@ -78,13 +81,14 @@ interface RunFixture {
 
 function createRunFixture(
   passed: boolean,
-  inputOverrides: Partial<Record<string, string>> = {}
+  inputOverrides: Partial<Record<string, string>> = {},
+  currentLabels: readonly string[] = []
 ): RunFixture {
   const recording = createRecordingCore()
   const createdTokens: string[] = []
   const labelActions: Array<{add: string[]; remove: string[]}> = []
   const callOrder: string[] = []
-  const client = clientStub()
+  const client = clientStub(currentLabels)
   const values = {
     github_token: 'synthetic-secret-value',
     workflow: 'Pull request checks',
@@ -95,6 +99,13 @@ function createRunFixture(
     fail_labels: 'blocked',
     exclude_checks: 'self',
     pr_number: '42',
+    noop_label: 'ready-for-noop',
+    review_label: 'ready-for-review',
+    deploy_label: 'ready-for-deployment',
+    merge_label: 'ready-to-merge',
+    clear_on_draft: 'true',
+    demote_merge_on_review_failure: 'true',
+    dry_run: 'false',
     ...inputOverrides
   }
 
@@ -129,6 +140,7 @@ function createRunFixture(
     },
     stringToArray,
     determineLabelActions,
+    determineBranchDeployState,
     async label(
       number,
       receivedContext,
@@ -222,6 +234,7 @@ test('parseInputs validates and normalizes an explicit current check name', () =
   )
 
   assert.deepEqual(inputs, {
+    mode: 'status',
     token: 'never-log-this-value',
     currentCheckName: 'CI / evaluate (ubuntu-latest)',
     checks: 'required',
@@ -230,7 +243,8 @@ test('parseInputs validates and normalizes an explicit current check name', () =
     passLabelsCleanup: ['waiting'],
     failLabels: ['blocked'],
     excludeChecks: ['self', 'docs'],
-    prNumber: 77
+    prNumber: 77,
+    branchDeploy: null
   })
   assert.doesNotMatch(
     [
@@ -287,6 +301,113 @@ test('parseInputs rejects invalid configuration', () => {
     () => parse({pr_number: ''}, {...context, issueNumber: undefined}),
     /positive safe integer/
   )
+  assert.throws(() => parse({mode: 'unknown'}), /mode must be exactly/)
+  assert.throws(
+    () =>
+      parse({
+        mode: 'branch-deploy',
+        transition: 'reset',
+        pass_labels: 'legacy'
+      }),
+    /branch-deploy mode cannot be combined/
+  )
+  assert.throws(
+    () =>
+      parse({
+        mode: 'branch-deploy',
+        transition: 'reset',
+        pass_labels_cleanup: 'legacy'
+      }),
+    /branch-deploy mode cannot be combined/
+  )
+  assert.throws(
+    () =>
+      parse({
+        mode: 'branch-deploy',
+        transition: 'reset',
+        fail_labels: 'legacy'
+      }),
+    /branch-deploy mode cannot be combined/
+  )
+})
+
+test('parseInputs loads branch-deploy defaults and policy overrides', () => {
+  const recording = createRecordingCore()
+  const parse = (values: Partial<Record<string, string>>) =>
+    parseInputs(
+      {
+        core: coreWithInputs(
+          {
+            github_token: 'value',
+            checks: 'required',
+            evaluations: 'approved,not_draft',
+            mode: 'branch-deploy',
+            pass_labels: '',
+            pass_labels_cleanup: '',
+            fail_labels: '',
+            noop_label: 'ready-for-noop',
+            review_label: 'ready-for-review',
+            deploy_label: 'ready-for-deployment',
+            merge_label: 'ready-to-merge',
+            clear_on_draft: 'true',
+            demote_merge_on_review_failure: 'true',
+            dry_run: 'false',
+            ...values
+          },
+          recording.core
+        ),
+        stringToArray
+      },
+      context
+    )
+
+  assert.deepEqual(parse({transition: 'review'}).branchDeploy, {
+    transition: 'review',
+    expectedHeadSha: '',
+    operationResult: null,
+    labels: {
+      noop: 'ready-for-noop',
+      review: 'ready-for-review',
+      deploy: 'ready-for-deployment',
+      merge: 'ready-to-merge'
+    },
+    clearOnDraft: true,
+    demoteMergeOnReviewFailure: true,
+    dryRun: false
+  })
+
+  assert.deepEqual(
+    parse({
+      transition: 'deploy',
+      expected_head_sha: 'abc123',
+      operation_result: 'failure',
+      noop_label: 'noop',
+      review_label: 'review',
+      deploy_label: 'deploy',
+      merge_label: 'merge',
+      clear_on_draft: 'false',
+      demote_merge_on_review_failure: 'false',
+      dry_run: 'true'
+    }).branchDeploy,
+    {
+      transition: 'deploy',
+      expectedHeadSha: 'abc123',
+      operationResult: 'failure',
+      labels: {
+        noop: 'noop',
+        review: 'review',
+        deploy: 'deploy',
+        merge: 'merge'
+      },
+      clearOnDraft: false,
+      demoteMergeOnReviewFailure: false,
+      dryRun: true
+    }
+  )
+  assert.throws(
+    () => parse({transition: 'review', noop_label: ''}),
+    /branch-deploy labels must not be empty/
+  )
 })
 
 test('label action logging covers additions, removals, and no-op results', () => {
@@ -340,6 +461,75 @@ test('run keeps legitimate PASS and FAIL evaluations successful', async () => {
   ])
   assert.ok(failing.recording.info.some(message => message.includes('FAIL')))
   assert.deepEqual(failing.recording.failed, [])
+})
+
+test('run reconciles branch-deploy labels from live state', async () => {
+  const fixture = createRunFixture(
+    true,
+    {
+      mode: 'branch-deploy',
+      transition: 'noop',
+      expected_head_sha: 'abc123',
+      operation_result: 'success',
+      pass_labels: '',
+      pass_labels_cleanup: '',
+      fail_labels: ''
+    },
+    ['ready-for-review', 'unrelated']
+  )
+
+  assert.equal(await run(fixture.dependencies), 'success')
+  assert.deepEqual(fixture.labelActions, [
+    {
+      add: ['ready-for-deployment'],
+      remove: ['ready-for-review']
+    }
+  ])
+  assert.equal(fixture.recording.outputs.get('branch_deploy_state'), 'deploy')
+  assert.equal(fixture.recording.outputs.get('head_matches'), 'true')
+})
+
+test('run reports non-command dry runs without mutating labels', async () => {
+  const fixture = createRunFixture(
+    false,
+    {
+      mode: 'branch-deploy',
+      transition: 'review',
+      dry_run: 'true',
+      pass_labels: '',
+      pass_labels_cleanup: '',
+      fail_labels: ''
+    },
+    ['ready-for-deployment']
+  )
+
+  assert.equal(await run(fixture.dependencies), 'success')
+  assert.deepEqual(fixture.labelActions, [])
+  assert.equal(fixture.recording.outputs.get('branch_deploy_state'), 'review')
+  assert.equal(fixture.recording.outputs.get('head_matches'), '')
+  assert.ok(
+    fixture.recording.info.some(message => message.includes('Dry run enabled'))
+  )
+})
+
+test('run reports a stale branch-deploy command', async () => {
+  const fixture = createRunFixture(
+    true,
+    {
+      mode: 'branch-deploy',
+      transition: 'noop',
+      expected_head_sha: 'old-head',
+      operation_result: 'success',
+      pass_labels: '',
+      pass_labels_cleanup: '',
+      fail_labels: ''
+    },
+    ['ready-for-review']
+  )
+
+  assert.equal(await run(fixture.dependencies), 'success')
+  assert.equal(fixture.recording.outputs.get('branch_deploy_state'), 'noop')
+  assert.equal(fixture.recording.outputs.get('head_matches'), 'false')
 })
 
 test('run validates inputs before creating a GitHub client', async () => {
@@ -433,6 +623,8 @@ test('native bundled-style entrypoint executes with read-only API behavior', asy
           data: {
             repository: {
               pullRequest: {
+                state: 'OPEN',
+                headRefOid: 'abc123',
                 reviewDecision: 'APPROVED',
                 mergeStateStatus: 'CLEAN',
                 mergeable: 'MERGEABLE',

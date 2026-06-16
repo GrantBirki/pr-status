@@ -239,8 +239,11 @@ async function label(pullRequestNumber, context, client, labelsToAdd, labelsToRe
     const removed = [];
     core.info(`🏷️ Processing labels for PR #${pullRequestNumber}`);
     if (remove.length > 0) {
-        core.debug('🔍 Fetching current labels on the issue');
-        const current = new Set(await client.listIssueLabels(request));
+        const suppliedLabels = dependencies.currentLabels;
+        if (suppliedLabels === undefined) {
+            core.debug('🔍 Fetching current labels on the issue');
+        }
+        const current = new Set(suppliedLabels ?? (await client.listIssueLabels(request)));
         for (const name of remove) {
             if (!current.has(name)) {
                 core.info(`🏷️ ⚠️ Label not found: '${name}' so it was not removed`);
@@ -369,6 +372,7 @@ function outputs(status, data, dependencies) {
     const criteria = parseEvaluationCriteria(data.evaluations);
     const { core } = dependencies;
     core.debug('📊 Setting GitHub Actions outputs...');
+    core.setOutput('head_sha', status.head_sha);
     core.setOutput('review_decision', status.review_decision);
     core.setOutput('total_approvals', status.total_approvals);
     core.setOutput('merge_state_status', status.merge_state_status);
@@ -413,6 +417,169 @@ function outputs_failureMessage(status, criterion) {
         return `⚠️ Evaluation '${criterion.source}' failed - PR is in draft status`;
     }
     return `⚠️ Evaluation '${criterion.source}' failed - PR only has ${status.total_approvals} approvals, but requires at least ${criterion.minimum} approvals`;
+}
+
+;// CONCATENATED MODULE: ./src/functions/branch-deploy.ts
+const ACTION_MODES = ['status', 'branch-deploy'];
+const BRANCH_DEPLOY_TRANSITIONS = [
+    'reset',
+    'review',
+    'noop',
+    'deploy',
+    'clear'
+];
+const OPERATION_RESULTS = [
+    'success',
+    'failure',
+    'cancelled',
+    'skipped'
+];
+function parseActionMode(value) {
+    const normalized = value === '' ? 'status' : value;
+    if (ACTION_MODES.includes(normalized)) {
+        return normalized;
+    }
+    throw new Error("mode must be exactly 'status' or 'branch-deploy'");
+}
+function parseBranchDeployTransition(value) {
+    if (BRANCH_DEPLOY_TRANSITIONS.includes(value)) {
+        return value;
+    }
+    throw new Error("transition must be exactly 'reset', 'review', 'noop', 'deploy', or 'clear'");
+}
+function parseOperationResult(value, transition) {
+    const command = transition === 'noop' || transition === 'deploy';
+    if (!command && value === '') {
+        return null;
+    }
+    if (OPERATION_RESULTS.includes(value)) {
+        return value;
+    }
+    throw new Error(command
+        ? 'operation_result is required for noop and deploy transitions'
+        : "operation_result must be exactly 'success', 'failure', 'cancelled', or 'skipped'");
+}
+function parseBooleanInput(name, value) {
+    if (value === 'true') {
+        return true;
+    }
+    if (value === 'false') {
+        return false;
+    }
+    throw new Error(`${name} must be exactly 'true' or 'false'`);
+}
+function validateBranchDeployConfiguration(configuration) {
+    const labels = Object.values(configuration.labels);
+    if (labels.some(label => label.trim() === '')) {
+        throw new Error('branch-deploy labels must not be empty');
+    }
+    if (new Set(labels.map(labelKey)).size !== labels.length) {
+        throw new Error('branch-deploy labels must be distinct');
+    }
+    const headBoundTransition = configuration.transition === 'reset' ||
+        configuration.transition === 'noop' ||
+        configuration.transition === 'deploy';
+    if (headBoundTransition && configuration.expectedHeadSha === '') {
+        throw new Error('expected_head_sha is required for reset, noop, and deploy transitions');
+    }
+}
+function determineBranchDeployState(data) {
+    const { configuration, pullRequest, evaluationPassed, currentLabels } = data;
+    const currentState = currentBranchDeployState(currentLabels, configuration.labels);
+    let headMatches = null;
+    let state;
+    if (pullRequest.state === 'CLOSED' ||
+        pullRequest.state === 'MERGED' ||
+        (pullRequest.isDraft && configuration.clearOnDraft)) {
+        state = 'cleared';
+    }
+    else if (configuration.transition === 'reset') {
+        headMatches = pullRequest.headSha === configuration.expectedHeadSha;
+        state = headMatches ? 'noop' : (currentState ?? 'noop');
+    }
+    else if (configuration.transition === 'clear') {
+        state = currentState ?? 'noop';
+    }
+    else if (configuration.transition === 'noop' ||
+        configuration.transition === 'deploy') {
+        headMatches = pullRequest.headSha === configuration.expectedHeadSha;
+        if (!headMatches) {
+            state = 'noop';
+        }
+        else if (configuration.operationResult !== 'success') {
+            state =
+                configuration.transition === 'noop' ? 'noop' : 'deploy';
+        }
+        else if (configuration.transition === 'noop') {
+            state = evaluationPassed ? 'deploy' : 'review';
+        }
+        else {
+            state = 'merge';
+        }
+    }
+    else if (currentState === null || currentState === 'noop') {
+        state = 'noop';
+    }
+    else if (evaluationPassed) {
+        state = currentState === 'merge' ? 'merge' : 'deploy';
+    }
+    else if (currentState === 'merge' &&
+        !configuration.demoteMergeOnReviewFailure) {
+        state = 'merge';
+    }
+    else {
+        state = 'review';
+    }
+    return {
+        state,
+        headMatches,
+        ...exactLabelActions(currentLabels, configuration.labels, state)
+    };
+}
+function currentBranchDeployState(currentLabels, labels) {
+    const current = new Set(currentLabels.map(labelKey));
+    if (current.has(labelKey(labels.noop))) {
+        return 'noop';
+    }
+    if (current.has(labelKey(labels.review))) {
+        return 'review';
+    }
+    if (current.has(labelKey(labels.deploy))) {
+        return 'deploy';
+    }
+    if (current.has(labelKey(labels.merge))) {
+        return 'merge';
+    }
+    return null;
+}
+function exactLabelActions(currentLabels, labels, state) {
+    const managed = [
+        labels.noop,
+        labels.review,
+        labels.deploy,
+        labels.merge
+    ];
+    const desired = state === 'cleared'
+        ? null
+        : state === 'noop'
+            ? labels.noop
+            : state === 'review'
+                ? labels.review
+                : state === 'deploy'
+                    ? labels.deploy
+                    : labels.merge;
+    const current = new Set(currentLabels.map(labelKey));
+    const currentNames = new Map(currentLabels.map(label => [labelKey(label), label]));
+    const desiredKey = desired === null ? null : labelKey(desired);
+    return {
+        labelsToAdd: desired !== null && !current.has(labelKey(desired)) ? [desired] : [],
+        labelsToRemove: managed
+            .filter(label => current.has(labelKey(label)) && labelKey(label) !== desiredKey)
+            .map(label => currentNames.get(labelKey(label)))
+    };
+}
+function labelKey(label) {
+    return label.trim().toLowerCase();
 }
 
 ;// CONCATENATED MODULE: ./src/functions/status.ts
@@ -510,6 +677,8 @@ async function status_status(client, context, pullRequestNumber, data, dependenc
     });
     const commitStatus = determineCommitStatus(pullRequest.checks, checkSelection, data.excludeChecks ?? [], data.currentCheckName);
     const result = {
+        pull_request_state: pullRequest.state,
+        head_sha: pullRequest.headRefOid,
         review_decision: pullRequest.reviewDecision,
         total_approvals: countUniqueApprovals(pullRequest.latestReviews),
         merge_state_status: pullRequest.mergeStateStatus,
@@ -518,6 +687,8 @@ async function status_status(client, context, pullRequestNumber, data, dependenc
         commit_status: commitStatus
     };
     core.info(`📊 Merge State Status: ${result.merge_state_status}`);
+    core.info(`📊 Pull Request State: ${result.pull_request_state}`);
+    core.info(`📊 Head SHA: ${result.head_sha}`);
     core.info(`📊 Mergeable State: ${result.mergeable_state}`);
     core.info(`📊 Is Draft: ${result.is_draft}`);
     core.info(`📊 Commit Status: ${result.commit_status}`);
@@ -605,6 +776,8 @@ const PULL_REQUEST_STATUS_QUERY = `query(
 ) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
+      state
+      headRefOid
       reviewDecision
       mergeStateStatus
       mergeable
@@ -685,6 +858,12 @@ function requireBoolean(value, path) {
         throw new Error(`Malformed GitHub response: ${path} must be a boolean`);
     }
     return value;
+}
+function requirePullRequestState(value, path) {
+    if (value === 'OPEN' || value === 'CLOSED' || value === 'MERGED') {
+        return value;
+    }
+    throw new Error(`Malformed GitHub response: ${path} must be OPEN, CLOSED, or MERGED`);
 }
 function sanitizeExcerpt(value, token) {
     const withoutToken = value.split(token).join('[REDACTED]');
@@ -839,6 +1018,8 @@ function parsePullRequestPage(value, includeChecks, includeReviews, token) {
     const pullRequest = requireRecord(repository.pullRequest, 'data.repository.pullRequest');
     return {
         metadata: {
+            state: requirePullRequestState(pullRequest.state, 'data.repository.pullRequest.state'),
+            headRefOid: requireString(pullRequest.headRefOid, 'data.repository.pullRequest.headRefOid'),
             reviewDecision: requireNullableString(pullRequest.reviewDecision, 'data.repository.pullRequest.reviewDecision'),
             mergeStateStatus: requireString(pullRequest.mergeStateStatus, 'data.repository.pullRequest.mergeStateStatus'),
             mergeable: requireString(pullRequest.mergeable, 'data.repository.pullRequest.mergeable'),
@@ -1077,6 +1258,7 @@ function createGitHubClient(token, options = {}) {
 
 
 
+
 const defaultDependencies = {
     core: src_actions,
     loadContext: loadActionContext,
@@ -1085,10 +1267,12 @@ const defaultDependencies = {
     outputs: outputs,
     stringToArray: stringToArray,
     determineLabelActions: determineLabelActions,
+    determineBranchDeployState: determineBranchDeployState,
     label: label
 };
 function parseInputs(dependencies, context) {
     const { core, stringToArray } = dependencies;
+    const mode = parseActionMode(core.getInput('mode'));
     const token = core.getInput('github_token', { required: true });
     const currentCheckName = core.getInput('workflow') || context.job;
     const checks = parseCheckSelection(core.getInput('checks', { required: true }));
@@ -1101,9 +1285,34 @@ function parseInputs(dependencies, context) {
     const prNumber = parsePullRequestNumber(inputPullRequestNumber === ''
         ? context.issueNumber
         : inputPullRequestNumber);
+    let branchDeploy = null;
     parseEvaluationCriteria(evaluations);
+    if (mode === 'branch-deploy') {
+        if (passLabels.length > 0 ||
+            passLabelsCleanup.length > 0 ||
+            failLabels.length > 0) {
+            throw new Error('branch-deploy mode cannot be combined with pass_labels, pass_labels_cleanup, or fail_labels');
+        }
+        const transition = parseBranchDeployTransition(core.getInput('transition'));
+        branchDeploy = {
+            transition,
+            expectedHeadSha: core.getInput('expected_head_sha'),
+            operationResult: parseOperationResult(core.getInput('operation_result'), transition),
+            labels: {
+                noop: core.getInput('noop_label'),
+                review: core.getInput('review_label'),
+                deploy: core.getInput('deploy_label'),
+                merge: core.getInput('merge_label')
+            },
+            clearOnDraft: parseBooleanInput('clear_on_draft', core.getInput('clear_on_draft')),
+            demoteMergeOnReviewFailure: parseBooleanInput('demote_merge_on_review_failure', core.getInput('demote_merge_on_review_failure')),
+            dryRun: parseBooleanInput('dry_run', core.getInput('dry_run'))
+        };
+        validateBranchDeployConfiguration(branchDeploy);
+    }
     core.debug('📋 Parsed and validated inputs successfully');
     return {
+        mode,
         token,
         currentCheckName,
         checks,
@@ -1112,7 +1321,8 @@ function parseInputs(dependencies, context) {
         passLabelsCleanup,
         failLabels,
         excludeChecks,
-        prNumber
+        prNumber,
+        branchDeploy
     };
 }
 function logLabelActions(labelsToAdd, labelsToRemove, core) {
@@ -1155,9 +1365,44 @@ async function run(dependencies = defaultDependencies) {
         }, { core });
         const passed = dependencies.outputs(statusResult, { evaluations: inputs.evaluations }, { core });
         core.info(`📊 Evaluation result: ${passed ? 'PASS ✅' : 'FAIL ❌'}`);
-        const labelActions = dependencies.determineLabelActions(passed, inputs.passLabels, inputs.failLabels, inputs.passLabelsCleanup);
+        let labelActions;
+        let currentLabels;
+        if (inputs.mode === 'branch-deploy') {
+            const branchDeploy = inputs.branchDeploy;
+            currentLabels = await client.listIssueLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                number: inputs.prNumber
+            });
+            const decision = dependencies.determineBranchDeployState({
+                configuration: branchDeploy,
+                pullRequest: {
+                    state: statusResult.pull_request_state,
+                    headSha: statusResult.head_sha,
+                    isDraft: statusResult.is_draft
+                },
+                evaluationPassed: passed,
+                currentLabels
+            });
+            core.setOutput('branch_deploy_state', decision.state);
+            core.setOutput('head_matches', decision.headMatches === null
+                ? ''
+                : decision.headMatches
+                    ? 'true'
+                    : 'false');
+            core.info(`🚦 Branch-deploy state: ${decision.state}`);
+            labelActions = decision;
+        }
+        else {
+            labelActions = dependencies.determineLabelActions(passed, inputs.passLabels, inputs.failLabels, inputs.passLabelsCleanup);
+        }
         logLabelActions(labelActions.labelsToAdd, labelActions.labelsToRemove, core);
-        await dependencies.label(inputs.prNumber, context, client, labelActions.labelsToAdd, labelActions.labelsToRemove, { core });
+        if (inputs.branchDeploy?.dryRun === true) {
+            core.info('🏷️ Dry run enabled; branch-deploy labels were not changed');
+        }
+        else {
+            await dependencies.label(inputs.prNumber, context, client, labelActions.labelsToAdd, labelActions.labelsToRemove, currentLabels === undefined ? { core } : { core, currentLabels });
+        }
         core.info('✅ PR Status Action completed successfully');
         return 'success';
     }

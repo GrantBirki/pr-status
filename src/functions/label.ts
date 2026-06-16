@@ -24,6 +24,7 @@ interface LabelCoreApi {
 
 interface LabelDependencies {
   core: LabelCoreApi
+  currentLabels?: readonly string[]
 }
 
 export function determineLabelActions(
@@ -73,8 +74,13 @@ export async function label(
 
   core.info(`🏷️ Processing labels for PR #${pullRequestNumber}`)
   if (remove.length > 0) {
-    core.debug('🔍 Fetching current labels on the issue')
-    const current = new Set(await client.listIssueLabels(request))
+    const suppliedLabels = dependencies.currentLabels
+    if (suppliedLabels === undefined) {
+      core.debug('🔍 Fetching current labels on the issue')
+    }
+    const current = new Set(
+      suppliedLabels ?? (await client.listIssueLabels(request))
+    )
 
     for (const name of remove) {
       if (!current.has(name)) {

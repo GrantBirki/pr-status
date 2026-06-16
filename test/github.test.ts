@@ -62,6 +62,8 @@ interface ConnectionOptions<T> {
 }
 
 interface PullPageOptions {
+  state?: 'OPEN' | 'CLOSED' | 'MERGED'
+  headRefOid?: string
   checks?: ConnectionOptions<GitHubCheck> | null
   reviews?: ConnectionOptions<GitHubReview>
   reviewDecision?: string | null
@@ -86,6 +88,8 @@ function connection<T>(options: ConnectionOptions<T> = {}): {
 
 function pullPage(options: PullPageOptions = {}): unknown {
   const pullRequest: Record<string, unknown> = {
+    state: options.state ?? 'OPEN',
+    headRefOid: options.headRefOid ?? 'abc123',
     reviewDecision: options.reviewDecision ?? null,
     mergeStateStatus: options.mergeStateStatus ?? 'CLEAN',
     mergeable: options.mergeable ?? 'MERGEABLE',
@@ -195,6 +199,8 @@ test('uses GitHub.com endpoints, protocol headers, a versioned user agent, and t
   const result = await client.getPullRequestStatus(request)
 
   assert.deepEqual(result, {
+    state: 'OPEN',
+    headRefOid: 'abc123',
     reviewDecision: 'APPROVED',
     mergeStateStatus: 'CLEAN',
     mergeable: 'MERGEABLE',
@@ -221,6 +227,7 @@ test('uses GitHub.com endpoints, protocol headers, a versioned user agent, and t
   }
   assert.match(body.query, /contexts\(first: 100, after: \$checksCursor\)/u)
   assert.match(body.query, /latestReviews\(first: 100, after: \$reviewsCursor\)/u)
+  assert.match(body.query, /\n      state\n      headRefOid\n/u)
   assert.deepEqual(body.variables, {
     owner: 'octocat',
     repo: 'example',
@@ -581,6 +588,8 @@ test('rejects malformed JSON and malformed GraphQL response shapes', async () =>
   const validCommits = pullRequest.commits
   const validReviews = pullRequest.latestReviews
   const validMetadata = {
+    state: 'OPEN',
+    headRefOid: 'abc123',
     reviewDecision: null,
     mergeStateStatus: 'CLEAN',
     mergeable: 'MERGEABLE',
@@ -607,6 +616,36 @@ test('rejects malformed JSON and malformed GraphQL response shapes', async () =>
     {
       body: JSON.stringify({data: {repository: {pullRequest: null}}}),
       message: /pullRequest must be an object/u
+    },
+    {
+      body: JSON.stringify({
+        data: {
+          repository: {
+            pullRequest: {
+              ...validMetadata,
+              state: 'UNKNOWN',
+              commits: validCommits,
+              latestReviews: validReviews
+            }
+          }
+        }
+      }),
+      message: /state must be OPEN, CLOSED, or MERGED/u
+    },
+    {
+      body: JSON.stringify({
+        data: {
+          repository: {
+            pullRequest: {
+              ...validMetadata,
+              headRefOid: null,
+              commits: validCommits,
+              latestReviews: validReviews
+            }
+          }
+        }
+      }),
+      message: /headRefOid must be a string/u
     },
     {
       body: JSON.stringify({

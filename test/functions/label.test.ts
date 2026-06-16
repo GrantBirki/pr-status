@@ -169,6 +169,26 @@ test('supports removal without additions', async () => {
   assert.deepEqual(client.added, [])
 })
 
+test('reuses a supplied label snapshot instead of listing again', async () => {
+  const client = recordingClient([], {list: new Error('must not list')})
+
+  const result = await label(
+    42,
+    context,
+    client.client,
+    ['ready'],
+    ['waiting'],
+    {
+      core: createRecordingCore().core,
+      currentLabels: ['waiting']
+    }
+  )
+
+  assert.deepEqual(result, {added: ['ready'], removed: ['waiting']})
+  assert.deepEqual(client.listed, [])
+  assert.deepEqual(client.removed, [{...baseRequest, name: 'waiting'}])
+})
+
 test('propagates label-list failures without attempting additions', async () => {
   const expected = new Error('list failed')
   const client = recordingClient([], {list: expected})

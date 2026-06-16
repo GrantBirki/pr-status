@@ -124,6 +124,8 @@ permission requirements, or change failure behavior as incidental cleanup.
 Current inputs:
 
 - `github_token`: token used for GitHub API requests. It must never be logged.
+- `mode`: `status` preserves the existing behavior; `branch-deploy` enables exact
+  branch-deploy-status label reconciliation.
 - `workflow`: exact, case-sensitive current job/check name to exclude from CI
   evaluation. Its metadata default is `${{ github.job }}`.
 - `pr_number`: pull request number, with event-context fallback behavior.
@@ -134,6 +136,9 @@ Current inputs:
 - `fail_labels`: labels added when evaluation fails.
 - `exclude_checks`: additional exact, case-sensitive check names excluded from
   CI status evaluation.
+- Branch-deploy mode inputs: `transition`, `expected_head_sha`,
+  `operation_result`, the four branch-deploy label names, `clear_on_draft`,
+  `demote_merge_on_review_failure`, and `dry_run`.
 
 The `workflow` name is preserved for API compatibility, but its value is a job
 or check name, not the top-level workflow display name. The default
@@ -151,6 +156,9 @@ the mechanism for excluding other checks.
 
 Current outputs:
 
+- `branch_deploy_state`
+- `head_sha`
+- `head_matches`
 - `approved`
 - `total_approvals`
 - `review_decision`
@@ -167,6 +175,23 @@ Current evaluation criteria:
 - `mergeable`
 - `min_approvals=N`
 - `not_draft`
+
+Branch-deploy mode owns exactly four caller-configured labels. It preserves all
+unmanaged labels and converges the managed set to at most one label. Closed,
+merged, cleared, and configured draft states remove the complete managed set.
+Reset transitions must provide the event's observed head SHA and preserve the
+live state when that SHA is stale. Clear transitions trust the live pull request
+state rather than a potentially stale closure event. Stale command results fail
+closed to the noop state. Review transitions
+must not promote a pull request that has not reached the post-noop review
+state. Branch-deploy mode rejects the legacy PASS/FAIL label inputs rather than
+combining two label ownership models.
+
+The reusable workflow checks out `job.workflow_repository` at
+`job.workflow_sha` before using the local action. Preserve that immutable
+self-reference; do not replace it with a mutable branch or major-version tag.
+The workflow serializes branch-deploy state changes per pull request, but correctness
+must continue to come from live PR state, head SHA, reviews, and labels.
 
 When changing any public input, output, evaluation, or label behavior, update all
 of the following together:
