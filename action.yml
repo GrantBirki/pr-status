@@ -9,6 +9,10 @@ inputs:
     description: The GitHub.com token used to read pull request state and, when requested, reconcile labels
     default: ${{ github.token }}
     required: true
+  mode:
+    description: Exactly `status` for the existing evaluation behavior or `branch-deploy` for exact branch-deploy-status label reconciliation
+    default: status
+    required: false
   workflow:
     description: The exact, case-sensitive current job/check name to exclude so this action does not evaluate itself
     default: ${{ github.job }}
@@ -41,7 +45,53 @@ inputs:
     description: 'A case-sensitive comma-separated list of exact check names to exclude from CI evaluation'
     default: ''
     required: false
+  transition:
+    description: In branch-deploy mode, exactly `reset`, `review`, `noop`, `deploy`, or `clear`
+    default: ''
+    required: false
+  expected_head_sha:
+    description: In branch-deploy mode, the pull request head SHA observed by a reset, noop, or deploy transition
+    default: ''
+    required: false
+  operation_result:
+    description: In branch-deploy mode, exactly `success`, `failure`, `cancelled`, or `skipped` for noop and deploy transitions
+    default: ''
+    required: false
+  noop_label:
+    description: Branch-deploy label for a pull request waiting for noop
+    default: ready-for-noop
+    required: false
+  review_label:
+    description: Branch-deploy label for a pull request waiting for review
+    default: ready-for-review
+    required: false
+  deploy_label:
+    description: Branch-deploy label for a pull request waiting for deployment
+    default: ready-for-deployment
+    required: false
+  merge_label:
+    description: Branch-deploy label for a pull request waiting to merge
+    default: ready-to-merge
+    required: false
+  clear_on_draft:
+    description: Whether branch-deploy mode clears managed labels while the pull request is a draft
+    default: 'true'
+    required: false
+  demote_merge_on_review_failure:
+    description: Whether a review failure moves the merge state back to waiting for review
+    default: 'true'
+    required: false
+  dry_run:
+    description: Whether branch-deploy mode reports the desired state without changing labels
+    default: 'false'
+    required: false
 outputs:
+  branch_deploy_state:
+    description: 'In branch-deploy mode, the converged state: cleared, noop, review, deploy, or merge'
+  head_sha:
+    description: The current pull request head commit SHA
+  head_matches:
+    description: 'In branch-deploy mode, true when expected_head_sha matches the live head for reset, noop, or deploy, false when stale; empty otherwise'
   approved:
     description: 'The string "true" when reviewDecision is APPROVED or null, and "false" otherwise'
   total_approvals:

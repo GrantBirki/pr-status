@@ -1,0 +1,164 @@
+name: branch-deploy-status
+
+on:
+  workflow_call:
+    inputs:
+      transition:
+        description: Branch-deploy transition to reconcile
+        required: true
+        type: string
+      pr_number:
+        description: Pull request number to reconcile
+        required: true
+        type: number
+      expected_head_sha:
+        description: Pull request head SHA observed by a reset, noop, or deploy transition
+        required: false
+        default: ''
+        type: string
+      operation_result:
+        description: Result of a noop or deploy job
+        required: false
+        default: ''
+        type: string
+      noop_label:
+        description: Label for a pull request waiting for noop
+        required: false
+        default: ready-for-noop
+        type: string
+      review_label:
+        description: Label for a pull request waiting for review
+        required: false
+        default: ready-for-review
+        type: string
+      deploy_label:
+        description: Label for a pull request waiting for deployment
+        required: false
+        default: ready-for-deployment
+        type: string
+      merge_label:
+        description: Label for a pull request waiting to merge
+        required: false
+        default: ready-to-merge
+        type: string
+      evaluations:
+        description: Comma-separated pr-status evaluation criteria
+        required: false
+        default: approved,not_draft
+        type: string
+      checks:
+        description: Whether to evaluate all or required checks
+        required: false
+        default: required
+        type: string
+      exclude_checks:
+        description: Comma-separated exact check names to exclude
+        required: false
+        default: ''
+        type: string
+      workflow:
+        description: Exact current job or check name to exclude
+        required: false
+        default: ''
+        type: string
+      clear_on_draft:
+        description: Clear managed branch-deploy labels while the pull request is a draft
+        required: false
+        default: true
+        type: boolean
+      demote_merge_on_review_failure:
+        description: Move pull requests from merge back to review when evaluation fails
+        required: false
+        default: true
+        type: boolean
+      dry_run:
+        description: Report the desired state without changing labels
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      branch_deploy_state:
+        description: The converged branch-deploy state
+        value: ${{ jobs.status.outputs.branch_deploy_state }}
+      head_sha:
+        description: The current pull request head commit SHA
+        value: ${{ jobs.status.outputs.head_sha }}
+      head_matches:
+        description: Whether expected_head_sha matches the current pull request head
+        value: ${{ jobs.status.outputs.head_matches }}
+      evaluation:
+        description: PASS or FAIL for the configured evaluations
+        value: ${{ jobs.status.outputs.evaluation }}
+      approved:
+        description: Whether the pull request satisfies repository approval
+        value: ${{ jobs.status.outputs.approved }}
+      total_approvals:
+        description: Number of unique current non-bot approvals
+        value: ${{ jobs.status.outputs.total_approvals }}
+      review_decision:
+        description: Current pull request review decision
+        value: ${{ jobs.status.outputs.review_decision }}
+      merge_state_status:
+        description: Current pull request merge state status
+        value: ${{ jobs.status.outputs.merge_state_status }}
+      mergeable_state:
+        description: Current pull request mergeable state
+        value: ${{ jobs.status.outputs.mergeable_state }}
+      commit_status:
+        description: Normalized current commit status
+        value: ${{ jobs.status.outputs.commit_status }}
+      is_draft:
+        description: Whether the pull request is a draft
+        value: ${{ jobs.status.outputs.is_draft }}
+
+jobs:
+  status:
+    name: branch-deploy-status
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: branch-deploy-status-${{ github.repository }}-${{ inputs.pr_number }}
+      queue: max
+    outputs:
+      branch_deploy_state: ${{ steps.pr-status.outputs.branch_deploy_state }}
+      head_sha: ${{ steps.pr-status.outputs.head_sha }}
+      head_matches: ${{ steps.pr-status.outputs.head_matches }}
+      evaluation: ${{ steps.pr-status.outputs.evaluation }}
+      approved: ${{ steps.pr-status.outputs.approved }}
+      total_approvals: ${{ steps.pr-status.outputs.total_approvals }}
+      review_decision: ${{ steps.pr-status.outputs.review_decision }}
+      merge_state_status: ${{ steps.pr-status.outputs.merge_state_status }}
+      mergeable_state: ${{ steps.pr-status.outputs.mergeable_state }}
+      commit_status: ${{ steps.pr-status.outputs.commit_status }}
+      is_draft: ${{ steps.pr-status.outputs.is_draft }}
+
+    steps:
+      - name: check out pr-status
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # pin@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: pr-status-action
+          persist-credentials: false
+
+      - name: reconcile branch-deploy state
+        id: pr-status
+        uses: ./pr-status-action
+        with:
+          github_token: ${{ github.token }}
+          mode: branch-deploy
+          transition: ${{ inputs.transition }}
+          pr_number: ${{ inputs.pr_number }}
+          expected_head_sha: ${{ inputs.expected_head_sha }}
+          operation_result: ${{ inputs.operation_result }}
+          noop_label: ${{ inputs.noop_label }}
+          review_label: ${{ inputs.review_label }}
+          deploy_label: ${{ inputs.deploy_label }}
+          merge_label: ${{ inputs.merge_label }}
+          evaluations: ${{ inputs.evaluations }}
+          checks: ${{ inputs.checks }}
+          exclude_checks: ${{ inputs.exclude_checks }}
+          workflow: ${{ inputs.workflow }}
+          clear_on_draft: ${{ inputs.clear_on_draft }}
+          demote_merge_on_review_failure: ${{ inputs.demote_merge_on_review_failure }}
+          dry_run: ${{ inputs.dry_run }}

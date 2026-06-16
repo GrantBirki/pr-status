@@ -6,9 +6,22 @@ import {
   determineLabelActions as selectLabelActions,
   label as reconcileLabels
 } from './functions/label.ts'
+import type {LabelActions} from './functions/label.ts'
 import {outputs as writeOutputs} from './functions/outputs.ts'
 import {parseEvaluationCriteria} from './functions/outputs.ts'
 import type {CheckSelection} from './functions/constants.ts'
+import {
+  determineBranchDeployState as selectBranchDeployState,
+  parseActionMode,
+  parseBranchDeployTransition,
+  parseBooleanInput,
+  parseOperationResult,
+  validateBranchDeployConfiguration
+} from './functions/branch-deploy.ts'
+import type {
+  ActionMode,
+  BranchDeployConfiguration
+} from './functions/branch-deploy.ts'
 import {
   parseCheckSelection,
   parsePullRequestNumber,
@@ -20,6 +33,7 @@ import {createGitHubClient} from './github.ts'
 import type {GitHubClient} from './github.ts'
 
 export interface ActionInputs {
+  mode: ActionMode
   token: string
   currentCheckName: string
   checks: CheckSelection
@@ -29,6 +43,7 @@ export interface ActionInputs {
   failLabels: string[]
   excludeChecks: string[]
   prNumber: number
+  branchDeploy: BranchDeployConfiguration | null
 }
 
 export interface MainDependencies {
@@ -39,6 +54,7 @@ export interface MainDependencies {
   outputs: typeof writeOutputs
   stringToArray: typeof parseStringToArray
   determineLabelActions: typeof selectLabelActions
+  determineBranchDeployState: typeof selectBranchDeployState
   label: typeof reconcileLabels
 }
 
@@ -52,6 +68,7 @@ export const defaultDependencies: MainDependencies = {
   outputs: writeOutputs,
   stringToArray: parseStringToArray,
   determineLabelActions: selectLabelActions,
+  determineBranchDeployState: selectBranchDeployState,
   label: reconcileLabels
 }
 
@@ -60,6 +77,7 @@ export function parseInputs(
   context: ActionContext
 ): ActionInputs {
   const {core, stringToArray} = dependencies
+  const mode = parseActionMode(core.getInput('mode'))
   const token = core.getInput('github_token', {required: true})
   const currentCheckName = core.getInput('workflow') || context.job
   const checks = parseCheckSelection(
@@ -78,11 +96,52 @@ export function parseInputs(
       ? context.issueNumber
       : inputPullRequestNumber
   )
+  let branchDeploy: BranchDeployConfiguration | null = null
 
   parseEvaluationCriteria(evaluations)
+  if (mode === 'branch-deploy') {
+    if (
+      passLabels.length > 0 ||
+      passLabelsCleanup.length > 0 ||
+      failLabels.length > 0
+    ) {
+      throw new Error(
+        'branch-deploy mode cannot be combined with pass_labels, pass_labels_cleanup, or fail_labels'
+      )
+    }
+
+    const transition = parseBranchDeployTransition(
+      core.getInput('transition')
+    )
+    branchDeploy = {
+      transition,
+      expectedHeadSha: core.getInput('expected_head_sha'),
+      operationResult: parseOperationResult(
+        core.getInput('operation_result'),
+        transition
+      ),
+      labels: {
+        noop: core.getInput('noop_label'),
+        review: core.getInput('review_label'),
+        deploy: core.getInput('deploy_label'),
+        merge: core.getInput('merge_label')
+      },
+      clearOnDraft: parseBooleanInput(
+        'clear_on_draft',
+        core.getInput('clear_on_draft')
+      ),
+      demoteMergeOnReviewFailure: parseBooleanInput(
+        'demote_merge_on_review_failure',
+        core.getInput('demote_merge_on_review_failure')
+      ),
+      dryRun: parseBooleanInput('dry_run', core.getInput('dry_run'))
+    }
+    validateBranchDeployConfiguration(branchDeploy)
+  }
   core.debug('📋 Parsed and validated inputs successfully')
 
   return {
+    mode,
     token,
     currentCheckName,
     checks,
@@ -91,7 +150,8 @@ export function parseInputs(
     passLabelsCleanup,
     failLabels,
     excludeChecks,
-    prNumber
+    prNumber,
+    branchDeploy
   }
 }
 
@@ -163,25 +223,63 @@ export async function run(
     )
     core.info(`📊 Evaluation result: ${passed ? 'PASS ✅' : 'FAIL ❌'}`)
 
-    const labelActions = dependencies.determineLabelActions(
-      passed,
-      inputs.passLabels,
-      inputs.failLabels,
-      inputs.passLabelsCleanup
-    )
+    let labelActions: LabelActions
+    let currentLabels: string[] | undefined
+
+    if (inputs.mode === 'branch-deploy') {
+      const branchDeploy =
+        inputs.branchDeploy as BranchDeployConfiguration
+      currentLabels = await client.listIssueLabels({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        number: inputs.prNumber
+      })
+      const decision = dependencies.determineBranchDeployState({
+        configuration: branchDeploy,
+        pullRequest: {
+          state: statusResult.pull_request_state,
+          headSha: statusResult.head_sha,
+          isDraft: statusResult.is_draft
+        },
+        evaluationPassed: passed,
+        currentLabels
+      })
+      core.setOutput('branch_deploy_state', decision.state)
+      core.setOutput(
+        'head_matches',
+        decision.headMatches === null
+          ? ''
+          : decision.headMatches
+            ? 'true'
+            : 'false'
+      )
+      core.info(`🚦 Branch-deploy state: ${decision.state}`)
+      labelActions = decision
+    } else {
+      labelActions = dependencies.determineLabelActions(
+        passed,
+        inputs.passLabels,
+        inputs.failLabels,
+        inputs.passLabelsCleanup
+      )
+    }
     logLabelActions(
       labelActions.labelsToAdd,
       labelActions.labelsToRemove,
       core
     )
-    await dependencies.label(
-      inputs.prNumber,
-      context,
-      client,
-      labelActions.labelsToAdd,
-      labelActions.labelsToRemove,
-      {core}
-    )
+    if (inputs.branchDeploy?.dryRun === true) {
+      core.info('🏷️ Dry run enabled; branch-deploy labels were not changed')
+    } else {
+      await dependencies.label(
+        inputs.prNumber,
+        context,
+        client,
+        labelActions.labelsToAdd,
+        labelActions.labelsToRemove,
+        currentLabels === undefined ? {core} : {core, currentLabels}
+      )
+    }
 
     core.info('✅ PR Status Action completed successfully')
     return 'success'

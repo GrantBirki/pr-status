@@ -53,6 +53,8 @@ function pullRequest(
   overrides: Partial<PullRequestStatusData> = {}
 ): PullRequestStatusData {
   return {
+    state: 'OPEN',
+    headRefOid: 'abc123',
     reviewDecision: 'APPROVED',
     mergeStateStatus: 'CLEAN',
     mergeable: 'MERGEABLE',
@@ -278,6 +280,8 @@ test('fetches status and excludes only the exact current check name', async () =
     {owner: 'octocat', repo: 'example', number: 42}
   ])
   assert.deepEqual(result, {
+    pull_request_state: 'OPEN',
+    head_sha: 'abc123',
     review_decision: null,
     total_approvals: 1,
     merge_state_status: 'BLOCKED',

@@ -91,6 +91,7 @@ export function outputs(
   const {core} = dependencies
 
   core.debug('📊 Setting GitHub Actions outputs...')
+  core.setOutput('head_sha', status.head_sha)
   core.setOutput('review_decision', status.review_decision)
   core.setOutput('total_approvals', status.total_approvals)
   core.setOutput('merge_state_status', status.merge_state_status)
