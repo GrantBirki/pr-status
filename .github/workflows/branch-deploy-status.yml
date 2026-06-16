@@ -4,12 +4,14 @@ on:
   workflow_call:
     inputs:
       transition:
-        description: Branch-deploy transition to reconcile
-        required: true
+        description: Optional explicit branch-deploy transition; supported caller events are resolved when omitted
+        required: false
+        default: ''
         type: string
       pr_number:
-        description: Pull request number to reconcile
-        required: true
+        description: Pull request number for an explicit transition
+        required: false
+        default: 0
         type: number
       expected_head_sha:
         description: Pull request head SHA observed by a reset, noop, or deploy transition
@@ -24,7 +26,7 @@ on:
       noop_label:
         description: Label for a pull request waiting for noop
         required: false
-        default: ready-for-noop
+        default: needs-noop
         type: string
       review_label:
         description: Label for a pull request waiting for review
@@ -44,7 +46,7 @@ on:
       evaluations:
         description: Comma-separated pr-status evaluation criteria
         required: false
-        default: approved,not_draft
+        default: approved,min_approvals=1,not_draft
         type: string
       checks:
         description: Whether to evaluate all or required checks
@@ -77,6 +79,9 @@ on:
         default: false
         type: boolean
     outputs:
+      branch_deploy_reconciled:
+        description: Whether the caller event was reconciled
+        value: ${{ jobs.status.outputs.branch_deploy_reconciled }}
       branch_deploy_state:
         description: The converged branch-deploy state
         value: ${{ jobs.status.outputs.branch_deploy_state }}
@@ -117,9 +122,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
-      group: branch-deploy-status-${{ github.repository }}-${{ inputs.pr_number }}
+      group: branch-deploy-status-${{ github.repository }}-${{ github.event.pull_request.number || github.event.client_payload.operation.pr_number || inputs.pr_number || github.event.issue.number || github.run_id }}
       queue: max
     outputs:
+      branch_deploy_reconciled: ${{ steps.pr-status.outputs.branch_deploy_reconciled }}
       branch_deploy_state: ${{ steps.pr-status.outputs.branch_deploy_state }}
       head_sha: ${{ steps.pr-status.outputs.head_sha }}
       head_matches: ${{ steps.pr-status.outputs.head_matches }}

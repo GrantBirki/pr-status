@@ -197,6 +197,7 @@ function loadActionContext(dependencies = {
         throw new Error('GITHUB_REPOSITORY must use the owner/repository format');
     }
     const eventPath = requiredEnvironmentValue(environment, 'GITHUB_EVENT_PATH');
+    const eventName = requiredEnvironmentValue(environment, 'GITHUB_EVENT_NAME');
     const job = requiredEnvironmentValue(environment, 'GITHUB_JOB');
     const payload = parseEventPayload(dependencies.readFile(eventPath));
     const issueNumber = nestedIssueNumber(payload, 'pull_request') ??
@@ -208,6 +209,8 @@ function loadActionContext(dependencies = {
             repo
         },
         job,
+        eventName,
+        eventPayload: payload,
         issueNumber
     };
 }
@@ -469,18 +472,21 @@ function parseBooleanInput(name, value) {
     throw new Error(`${name} must be exactly 'true' or 'false'`);
 }
 function validateBranchDeployConfiguration(configuration) {
-    const labels = Object.values(configuration.labels);
-    if (labels.some(label => label.trim() === '')) {
-        throw new Error('branch-deploy labels must not be empty');
-    }
-    if (new Set(labels.map(labelKey)).size !== labels.length) {
-        throw new Error('branch-deploy labels must be distinct');
-    }
+    validateBranchDeployPolicy(configuration);
     const headBoundTransition = configuration.transition === 'reset' ||
         configuration.transition === 'noop' ||
         configuration.transition === 'deploy';
     if (headBoundTransition && configuration.expectedHeadSha === '') {
         throw new Error('expected_head_sha is required for reset, noop, and deploy transitions');
+    }
+}
+function validateBranchDeployPolicy(policy) {
+    const labels = Object.values(policy.labels);
+    if (labels.some(label => label.trim() === '')) {
+        throw new Error('branch-deploy labels must not be empty');
+    }
+    if (new Set(labels.map(labelKey)).size !== labels.length) {
+        throw new Error('branch-deploy labels must be distinct');
     }
 }
 function determineBranchDeployState(data) {
@@ -580,6 +586,242 @@ function exactLabelActions(currentLabels, labels, state) {
 }
 function labelKey(label) {
     return label.trim().toLowerCase();
+}
+
+;// CONCATENATED MODULE: ./src/functions/branch-deploy-event.ts
+const RESET_ACTIONS = new Set([
+    'opened',
+    'reopened',
+    'synchronize',
+    'ready_for_review'
+]);
+const CLEAR_ACTIONS = new Set(['converted_to_draft', 'closed']);
+const REVIEW_ACTIONS = new Set(['submitted', 'dismissed']);
+const STATUS_MARKER_PATTERN = /<!-- branch-deploy-status:([^\r\n]*) -->/gu;
+function branch_deploy_event_isRecord(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function requireRecord(value, path) {
+    if (!branch_deploy_event_isRecord(value)) {
+        throw new Error(`${path} must be an object`);
+    }
+    return value;
+}
+function requireString(value, path) {
+    if (typeof value !== 'string' || value === '') {
+        throw new Error(`${path} must be a nonempty string`);
+    }
+    return value;
+}
+function requireBoolean(value, path) {
+    if (typeof value !== 'boolean') {
+        throw new Error(`${path} must be a boolean`);
+    }
+    return value;
+}
+function requirePositiveInteger(value, path) {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error(`${path} must be a positive safe integer`);
+    }
+    return value;
+}
+function requireTransition(value, path) {
+    if (value === 'noop' || value === 'deploy') {
+        return value;
+    }
+    throw new Error(`${path} must be exactly 'noop' or 'deploy'`);
+}
+function requireOperationResult(value, path) {
+    if (value === 'success' || value === 'failure') {
+        return value;
+    }
+    throw new Error(`${path} must be exactly 'success' or 'failure'`);
+}
+function requireIsoTimestamp(value, path) {
+    const timestamp = requireString(value, path);
+    const milliseconds = Date.parse(timestamp);
+    if (!timestamp.endsWith('Z') || !Number.isFinite(milliseconds)) {
+        throw new Error(`${path} must be an ISO 8601 UTC timestamp`);
+    }
+    return timestamp;
+}
+function eventAction(payload) {
+    return typeof payload.action === 'string' ? payload.action : '';
+}
+function pullRequestEventData(payload, requireHeadSha) {
+    const pullRequest = requireRecord(payload.pull_request, 'github.event.pull_request');
+    const prNumber = requirePositiveInteger(pullRequest.number, 'github.event.pull_request.number');
+    if (!requireHeadSha) {
+        return { prNumber, headSha: '', updatedAt: '' };
+    }
+    const head = requireRecord(pullRequest.head, 'github.event.pull_request.head');
+    return {
+        prNumber,
+        headSha: requireString(head.sha, 'github.event.pull_request.head.sha'),
+        updatedAt: requireIsoTimestamp(pullRequest.updated_at, 'github.event.pull_request.updated_at')
+    };
+}
+function parseCommandIdentity(value, path) {
+    const data = requireRecord(value, path);
+    return {
+        prNumber: requirePositiveInteger(data.pr_number, `${path}.pr_number`),
+        expectedHeadSha: requireString(data.expected_head_sha, `${path}.expected_head_sha`),
+        transition: requireTransition(data.transition, `${path}.transition`),
+        runId: requirePositiveInteger(data.github_run_id, `${path}.github_run_id`),
+        runAttempt: requirePositiveInteger(data.github_run_attempt, `${path}.github_run_attempt`),
+        job: requireString(data.github_job, `${path}.github_job`),
+        commandCommentId: requirePositiveInteger(data.command_comment_id, `${path}.command_comment_id`),
+        stableBranchUsed: requireBoolean(data.stable_branch_used, `${path}.stable_branch_used`)
+    };
+}
+function parseDispatch(payload) {
+    const path = 'github.event.client_payload';
+    const data = requireRecord(payload.client_payload, path);
+    if (data.schema_version !== 1) {
+        throw new Error(`${path}.schema_version must be exactly 1`);
+    }
+    const operationPath = `${path}.operation`;
+    const operation = requireRecord(data.operation, operationPath);
+    const identity = parseCommandIdentity({ ...operation, stable_branch_used: false }, operationPath);
+    return {
+        ...identity,
+        operationResult: requireOperationResult(operation.operation_result, `${operationPath}.operation_result`),
+        statusCommentId: requirePositiveInteger(operation.status_comment_id, `${operationPath}.status_comment_id`)
+    };
+}
+function trustedStatusMarkers(comments) {
+    const markers = [];
+    for (const comment of comments) {
+        if (comment.user?.login !== 'github-actions[bot]' ||
+            comment.user.type !== 'Bot') {
+            continue;
+        }
+        for (const match of comment.body.matchAll(STATUS_MARKER_PATTERN)) {
+            let value;
+            try {
+                value = JSON.parse(match[1]);
+            }
+            catch {
+                throw new Error('branch-deploy status marker contains invalid JSON');
+            }
+            markers.push({
+                ...parseCommandIdentity(value, 'branch-deploy status marker'),
+                statusCommentId: comment.id
+            });
+        }
+    }
+    return markers;
+}
+function sameCommand(marker, dispatch) {
+    return (marker.prNumber === dispatch.prNumber &&
+        marker.expectedHeadSha === dispatch.expectedHeadSha &&
+        marker.transition === dispatch.transition &&
+        marker.runId === dispatch.runId &&
+        marker.runAttempt === dispatch.runAttempt &&
+        marker.job === dispatch.job &&
+        marker.commandCommentId === dispatch.commandCommentId &&
+        marker.stableBranchUsed === dispatch.stableBranchUsed);
+}
+function expectedIssueUrl(context, prNumber) {
+    return `https://api.github.com/repos/${context.repo.owner}/${context.repo.repo}/issues/${prNumber}`;
+}
+async function resolveDispatch(context, client) {
+    const dispatch = parseDispatch(context.eventPayload);
+    const statusComment = await client.getIssueComment({
+        ...context.repo,
+        commentId: dispatch.statusCommentId
+    });
+    if (statusComment.id !== dispatch.statusCommentId) {
+        throw new Error('repository dispatch status comment ID does not match');
+    }
+    if (statusComment.issueUrl.toLowerCase() !==
+        expectedIssueUrl(context, dispatch.prNumber).toLowerCase()) {
+        throw new Error('repository dispatch status comment does not belong to the pull request');
+    }
+    const statusMarkers = trustedStatusMarkers([statusComment]);
+    if (statusMarkers.length !== 1 ||
+        !sameCommand(statusMarkers[0], dispatch)) {
+        throw new Error('repository dispatch has no matching trusted branch-deploy status marker');
+    }
+    const comments = await client.listIssueComments({
+        ...context.repo,
+        number: dispatch.prNumber
+    });
+    const markers = trustedStatusMarkers(comments);
+    const newerCommand = markers.some(marker => marker.prNumber === dispatch.prNumber &&
+        !marker.stableBranchUsed &&
+        marker.statusCommentId > dispatch.statusCommentId);
+    if (newerCommand) {
+        return {
+            shouldReconcile: false,
+            reason: 'a newer branch-deploy command exists for this pull request'
+        };
+    }
+    return {
+        shouldReconcile: true,
+        transition: dispatch.transition,
+        prNumber: dispatch.prNumber,
+        expectedHeadSha: dispatch.expectedHeadSha,
+        operationResult: dispatch.operationResult
+    };
+}
+async function resolveBranchDeployEvent(context, client) {
+    const action = eventAction(context.eventPayload);
+    if (context.eventName === 'pull_request') {
+        if (RESET_ACTIONS.has(action)) {
+            const data = pullRequestEventData(context.eventPayload, true);
+            const comments = await client.listIssueComments({
+                ...context.repo,
+                number: data.prNumber,
+                since: data.updatedAt
+            });
+            const commandOwnsCurrentHead = trustedStatusMarkers(comments).some(marker => marker.prNumber === data.prNumber &&
+                marker.expectedHeadSha === data.headSha &&
+                !marker.stableBranchUsed);
+            if (commandOwnsCurrentHead) {
+                return {
+                    shouldReconcile: false,
+                    reason: 'a branch-deploy command already owns this pull request head'
+                };
+            }
+            return {
+                shouldReconcile: true,
+                transition: 'reset',
+                prNumber: data.prNumber,
+                expectedHeadSha: data.headSha,
+                operationResult: null
+            };
+        }
+        if (CLEAR_ACTIONS.has(action)) {
+            const data = pullRequestEventData(context.eventPayload, false);
+            return {
+                shouldReconcile: true,
+                transition: 'clear',
+                prNumber: data.prNumber,
+                expectedHeadSha: '',
+                operationResult: null
+            };
+        }
+    }
+    if (context.eventName === 'pull_request_review' &&
+        REVIEW_ACTIONS.has(action)) {
+        const data = pullRequestEventData(context.eventPayload, false);
+        return {
+            shouldReconcile: true,
+            transition: 'review',
+            prNumber: data.prNumber,
+            expectedHeadSha: '',
+            operationResult: null
+        };
+    }
+    if (context.eventName === 'repository_dispatch' &&
+        action === 'branch-deploy-status') {
+        return resolveDispatch(context, client);
+    }
+    return {
+        shouldReconcile: false,
+        reason: `event ${context.eventName}:${action || 'unknown'} is not a supported branch-deploy status transition`
+    };
 }
 
 ;// CONCATENATED MODULE: ./src/functions/status.ts
@@ -829,7 +1071,7 @@ const PULL_REQUEST_STATUS_QUERY = `query(
 function github_isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-function requireRecord(value, path) {
+function github_requireRecord(value, path) {
     if (!github_isRecord(value)) {
         throw new Error(`Malformed GitHub response: ${path} must be an object`);
     }
@@ -841,7 +1083,7 @@ function requireArray(value, path) {
     }
     return value;
 }
-function requireString(value, path) {
+function github_requireString(value, path) {
     if (typeof value !== 'string') {
         throw new Error(`Malformed GitHub response: ${path} must be a string`);
     }
@@ -853,7 +1095,7 @@ function requireNullableString(value, path) {
     }
     return value;
 }
-function requireBoolean(value, path) {
+function github_requireBoolean(value, path) {
     if (typeof value !== 'boolean') {
         throw new Error(`Malformed GitHub response: ${path} must be a boolean`);
     }
@@ -926,21 +1168,21 @@ function requestError(method, url, status, body, token) {
     return new Error(`GitHub API request failed: ${method} ${url} returned HTTP ${status}${suffix}`);
 }
 function parsePageInfo(value, path) {
-    const pageInfo = requireRecord(value, path);
+    const pageInfo = github_requireRecord(value, path);
     return {
-        hasNextPage: requireBoolean(pageInfo.hasNextPage, `${path}.hasNextPage`),
+        hasNextPage: github_requireBoolean(pageInfo.hasNextPage, `${path}.hasNextPage`),
         endCursor: requireNullableString(pageInfo.endCursor, `${path}.endCursor`)
     };
 }
 function parseCheck(value, index) {
     const path = `data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[${index}]`;
-    const check = requireRecord(value, path);
-    const typename = requireString(check.__typename, `${path}.__typename`);
-    const isRequired = requireBoolean(check.isRequired, `${path}.isRequired`);
+    const check = github_requireRecord(value, path);
+    const typename = github_requireString(check.__typename, `${path}.__typename`);
+    const isRequired = github_requireBoolean(check.isRequired, `${path}.isRequired`);
     if (typename === 'CheckRun') {
         return {
             __typename: typename,
-            name: requireString(check.name, `${path}.name`),
+            name: github_requireString(check.name, `${path}.name`),
             isRequired,
             conclusion: requireNullableString(check.conclusion, `${path}.conclusion`),
             status: requireNullableString(check.status, `${path}.status`)
@@ -949,7 +1191,7 @@ function parseCheck(value, index) {
     if (typename === 'StatusContext') {
         return {
             __typename: typename,
-            context: requireString(check.context, `${path}.context`),
+            context: github_requireString(check.context, `${path}.context`),
             isRequired,
             state: requireNullableString(check.state, `${path}.state`)
         };
@@ -958,17 +1200,17 @@ function parseCheck(value, index) {
 }
 function parseReview(value, index) {
     const path = `data.repository.pullRequest.latestReviews.nodes[${index}]`;
-    const review = requireRecord(value, path);
+    const review = github_requireRecord(value, path);
     let author = null;
     if (review.author !== null) {
-        const authorRecord = requireRecord(review.author, `${path}.author`);
+        const authorRecord = github_requireRecord(review.author, `${path}.author`);
         author = {
-            __typename: requireString(authorRecord.__typename, `${path}.author.__typename`),
-            login: requireString(authorRecord.login, `${path}.author.login`)
+            __typename: github_requireString(authorRecord.__typename, `${path}.author.__typename`),
+            login: github_requireString(authorRecord.login, `${path}.author.login`)
         };
     }
     return {
-        state: requireString(review.state, `${path}.state`),
+        state: github_requireString(review.state, `${path}.state`),
         author
     };
 }
@@ -979,18 +1221,18 @@ function emptyConnection() {
     };
 }
 function parseChecks(pullRequest) {
-    const commits = requireRecord(pullRequest.commits, 'data.repository.pullRequest.commits');
+    const commits = github_requireRecord(pullRequest.commits, 'data.repository.pullRequest.commits');
     const nodes = requireArray(commits.nodes, 'data.repository.pullRequest.commits.nodes');
     if (nodes.length !== 1) {
         throw new Error('Malformed GitHub response: pull request must contain one latest commit');
     }
-    const commitNode = requireRecord(nodes[0], 'data.repository.pullRequest.commits.nodes[0]');
-    const commit = requireRecord(commitNode.commit, 'data.repository.pullRequest.commits.nodes[0].commit');
+    const commitNode = github_requireRecord(nodes[0], 'data.repository.pullRequest.commits.nodes[0]');
+    const commit = github_requireRecord(commitNode.commit, 'data.repository.pullRequest.commits.nodes[0].commit');
     if (commit.statusCheckRollup === null) {
         return emptyConnection();
     }
-    const rollup = requireRecord(commit.statusCheckRollup, 'data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup');
-    const contexts = requireRecord(rollup.contexts, 'data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts');
+    const rollup = github_requireRecord(commit.statusCheckRollup, 'data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup');
+    const contexts = github_requireRecord(rollup.contexts, 'data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts');
     const checks = requireArray(contexts.nodes, 'data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes');
     return {
         nodes: checks.map(parseCheck),
@@ -998,7 +1240,7 @@ function parseChecks(pullRequest) {
     };
 }
 function parseReviews(pullRequest) {
-    const latestReviews = requireRecord(pullRequest.latestReviews, 'data.repository.pullRequest.latestReviews');
+    const latestReviews = github_requireRecord(pullRequest.latestReviews, 'data.repository.pullRequest.latestReviews');
     const reviews = requireArray(latestReviews.nodes, 'data.repository.pullRequest.latestReviews.nodes');
     return {
         nodes: reviews.map(parseReview),
@@ -1006,24 +1248,24 @@ function parseReviews(pullRequest) {
     };
 }
 function parsePullRequestPage(value, includeChecks, includeReviews, token) {
-    const body = requireRecord(value, 'response');
+    const body = github_requireRecord(value, 'response');
     if ('errors' in body) {
         const errors = requireArray(body.errors, 'errors');
         if (errors.length > 0) {
             throw new Error(`GitHub GraphQL request failed: ${sanitizeExcerpt(JSON.stringify(errors), token)}`);
         }
     }
-    const data = requireRecord(body.data, 'data');
-    const repository = requireRecord(data.repository, 'data.repository');
-    const pullRequest = requireRecord(repository.pullRequest, 'data.repository.pullRequest');
+    const data = github_requireRecord(body.data, 'data');
+    const repository = github_requireRecord(data.repository, 'data.repository');
+    const pullRequest = github_requireRecord(repository.pullRequest, 'data.repository.pullRequest');
     return {
         metadata: {
             state: requirePullRequestState(pullRequest.state, 'data.repository.pullRequest.state'),
-            headRefOid: requireString(pullRequest.headRefOid, 'data.repository.pullRequest.headRefOid'),
+            headRefOid: github_requireString(pullRequest.headRefOid, 'data.repository.pullRequest.headRefOid'),
             reviewDecision: requireNullableString(pullRequest.reviewDecision, 'data.repository.pullRequest.reviewDecision'),
-            mergeStateStatus: requireString(pullRequest.mergeStateStatus, 'data.repository.pullRequest.mergeStateStatus'),
-            mergeable: requireString(pullRequest.mergeable, 'data.repository.pullRequest.mergeable'),
-            isDraft: requireBoolean(pullRequest.isDraft, 'data.repository.pullRequest.isDraft')
+            mergeStateStatus: github_requireString(pullRequest.mergeStateStatus, 'data.repository.pullRequest.mergeStateStatus'),
+            mergeable: github_requireString(pullRequest.mergeable, 'data.repository.pullRequest.mergeable'),
+            isDraft: github_requireBoolean(pullRequest.isDraft, 'data.repository.pullRequest.isDraft')
         },
         checks: includeChecks ? parseChecks(pullRequest) : null,
         reviews: includeReviews ? parseReviews(pullRequest) : null
@@ -1032,9 +1274,32 @@ function parsePullRequestPage(value, includeChecks, includeReviews, token) {
 function parseLabelNames(value, path) {
     const labels = requireArray(value, path);
     return labels.map((value, index) => {
-        const label = requireRecord(value, `${path}[${index}]`);
-        return requireString(label.name, `${path}[${index}].name`);
+        const label = github_requireRecord(value, `${path}[${index}]`);
+        return github_requireString(label.name, `${path}[${index}].name`);
     });
+}
+function parseIssueComment(value, path) {
+    const comment = github_requireRecord(value, path);
+    const id = comment.id;
+    if (!Number.isSafeInteger(id) || id <= 0) {
+        throw new Error(`Malformed GitHub response: ${path}.id must be a positive safe integer`);
+    }
+    const user = comment.user === null
+        ? null
+        : github_requireRecord(comment.user, `${path}.user`);
+    return {
+        id: id,
+        body: github_requireString(comment.body, `${path}.body`),
+        user: user === null
+            ? null
+            : {
+                login: github_requireString(user.login, `${path}.user.login`),
+                type: github_requireString(user.type, `${path}.user.type`)
+            }
+    };
+}
+function parseIssueComments(value) {
+    return requireArray(value, 'issue comments').map((comment, index) => parseIssueComment(comment, `issue comments[${index}]`));
 }
 function createPaginationState() {
     return {
@@ -1101,10 +1366,13 @@ function requireGitHubRestUrl(value, expectedPath) {
     }
     return { url: url.toString(), page };
 }
-function validateRequest(request) {
+function validateRepositoryRequest(request) {
     if (request.owner.length === 0 || request.repo.length === 0) {
         throw new Error('GitHub repository owner and name must not be empty');
     }
+}
+function validateRequest(request) {
+    validateRepositoryRequest(request);
     if (!Number.isSafeInteger(request.number) || request.number <= 0) {
         throw new Error('GitHub pull request number must be a positive safe integer');
     }
@@ -1230,6 +1498,58 @@ function createGitHubClient(token, options = {}) {
             url = validatedLink.url;
         }
     }
+    async function listIssueComments(commentsRequest) {
+        validateRequest(commentsRequest);
+        if (commentsRequest.since === '') {
+            throw new Error('GitHub issue comments since timestamp must not be empty');
+        }
+        const path = `/repos/${encodeURIComponent(commentsRequest.owner)}/${encodeURIComponent(commentsRequest.repo)}/issues/${commentsRequest.number}/comments`;
+        const since = commentsRequest.since === undefined
+            ? ''
+            : `since=${encodeURIComponent(commentsRequest.since)}&`;
+        let url = `${REST_API_URL}${path}?${since}per_page=100&page=1`;
+        const seenPages = new Set(['1']);
+        const comments = [];
+        let pages = 0;
+        while (true) {
+            pages += 1;
+            const response = await request('GET', url);
+            const parsedJson = parseJson(response.body, 'issue comments response', token);
+            comments.push(...parseIssueComments(parsedJson));
+            if (comments.length > MAX_NODES) {
+                throw new Error('GitHub issue comments pagination exceeded 10,000 nodes');
+            }
+            const link = nextLink(response.headers.get('link'));
+            if (link === null) {
+                return comments;
+            }
+            if (pages >= MAX_PAGES) {
+                throw new Error('GitHub issue comments pagination exceeded 100 pages');
+            }
+            const validatedLink = requireGitHubRestUrl(link, path);
+            if (seenPages.has(validatedLink.page)) {
+                throw new Error('GitHub issue comments pagination repeated a page');
+            }
+            seenPages.add(validatedLink.page);
+            url = validatedLink.url;
+        }
+    }
+    async function getIssueComment(commentRequest) {
+        validateRepositoryRequest(commentRequest);
+        if (!Number.isSafeInteger(commentRequest.commentId) ||
+            commentRequest.commentId <= 0) {
+            throw new Error('GitHub issue comment ID must be a positive safe integer');
+        }
+        const url = `${REST_API_URL}/repos/${encodeURIComponent(commentRequest.owner)}/${encodeURIComponent(commentRequest.repo)}/issues/comments/${commentRequest.commentId}`;
+        const response = await request('GET', url);
+        const parsedJson = parseJson(response.body, 'issue comment response', token);
+        const comment = parseIssueComment(parsedJson, 'issue comment');
+        const record = github_requireRecord(parsedJson, 'issue comment');
+        return {
+            ...comment,
+            issueUrl: github_requireString(record.issue_url, 'issue comment.issue_url')
+        };
+    }
     async function removeLabel(labelRequest) {
         validateRequest(labelRequest);
         const url = `${REST_API_URL}/repos/${encodeURIComponent(labelRequest.owner)}/${encodeURIComponent(labelRequest.repo)}/issues/${labelRequest.number}/labels/${encodeURIComponent(labelRequest.name)}`;
@@ -1246,10 +1566,18 @@ function createGitHubClient(token, options = {}) {
         const parsedJson = parseJson(response.body, 'label addition response', token);
         parseLabelNames(parsedJson, 'labels');
     }
-    return { getPullRequestStatus, listIssueLabels, removeLabel, addLabels };
+    return {
+        getPullRequestStatus,
+        getIssueComment,
+        listIssueComments,
+        listIssueLabels,
+        removeLabel,
+        addLabels
+    };
 }
 
 ;// CONCATENATED MODULE: ./src/main.ts
+
 
 
 
@@ -1268,6 +1596,7 @@ const defaultDependencies = {
     stringToArray: stringToArray,
     determineLabelActions: determineLabelActions,
     determineBranchDeployState: determineBranchDeployState,
+    resolveBranchDeployEvent: resolveBranchDeployEvent,
     label: label
 };
 function parseInputs(dependencies, context) {
@@ -1282,9 +1611,7 @@ function parseInputs(dependencies, context) {
     const failLabels = stringToArray(core.getInput('fail_labels'));
     const excludeChecks = stringToArray(core.getInput('exclude_checks'));
     const inputPullRequestNumber = core.getInput('pr_number');
-    const prNumber = parsePullRequestNumber(inputPullRequestNumber === ''
-        ? context.issueNumber
-        : inputPullRequestNumber);
+    let prNumber = null;
     let branchDeploy = null;
     parseEvaluationCriteria(evaluations);
     if (mode === 'branch-deploy') {
@@ -1293,11 +1620,7 @@ function parseInputs(dependencies, context) {
             failLabels.length > 0) {
             throw new Error('branch-deploy mode cannot be combined with pass_labels, pass_labels_cleanup, or fail_labels');
         }
-        const transition = parseBranchDeployTransition(core.getInput('transition'));
-        branchDeploy = {
-            transition,
-            expectedHeadSha: core.getInput('expected_head_sha'),
-            operationResult: parseOperationResult(core.getInput('operation_result'), transition),
+        const policy = {
             labels: {
                 noop: core.getInput('noop_label'),
                 review: core.getInput('review_label'),
@@ -1308,7 +1631,30 @@ function parseInputs(dependencies, context) {
             demoteMergeOnReviewFailure: parseBooleanInput('demote_merge_on_review_failure', core.getInput('demote_merge_on_review_failure')),
             dryRun: parseBooleanInput('dry_run', core.getInput('dry_run'))
         };
-        validateBranchDeployConfiguration(branchDeploy);
+        validateBranchDeployPolicy(policy);
+        const transitionInput = core.getInput('transition');
+        if (transitionInput === '') {
+            branchDeploy = { source: 'event', policy };
+        }
+        else {
+            const transition = parseBranchDeployTransition(transitionInput);
+            const configuration = {
+                ...policy,
+                transition,
+                expectedHeadSha: core.getInput('expected_head_sha'),
+                operationResult: parseOperationResult(core.getInput('operation_result'), transition)
+            };
+            validateBranchDeployConfiguration(configuration);
+            prNumber = parsePullRequestNumber(inputPullRequestNumber === ''
+                ? context.issueNumber
+                : inputPullRequestNumber);
+            branchDeploy = { source: 'explicit', configuration };
+        }
+    }
+    else {
+        prNumber = parsePullRequestNumber(inputPullRequestNumber === ''
+            ? context.issueNumber
+            : inputPullRequestNumber);
     }
     core.debug('📋 Parsed and validated inputs successfully');
     return {
@@ -1356,9 +1702,37 @@ async function run(dependencies = defaultDependencies) {
         const context = dependencies.loadContext();
         const inputs = parseInputs(dependencies, context);
         token = inputs.token;
-        core.info(`🔍 Evaluating PR #${inputs.prNumber}`);
         const client = dependencies.createClient(inputs.token);
-        const statusResult = await dependencies.status(client, context, inputs.prNumber, {
+        let prNumber = inputs.prNumber;
+        let branchDeployConfiguration = null;
+        if (inputs.branchDeploy !== null) {
+            if (inputs.branchDeploy.source === 'explicit') {
+                branchDeployConfiguration = inputs.branchDeploy.configuration;
+            }
+            else {
+                const resolution = await dependencies.resolveBranchDeployEvent(context, client);
+                if (!resolution.shouldReconcile) {
+                    core.setOutput('branch_deploy_reconciled', 'false');
+                    core.info(`🚦 No branch-deploy reconciliation: ${resolution.reason}`);
+                    core.info('✅ PR Status Action completed successfully');
+                    return 'success';
+                }
+                prNumber = resolution.prNumber;
+                branchDeployConfiguration = {
+                    ...inputs.branchDeploy.policy,
+                    transition: resolution.transition,
+                    expectedHeadSha: resolution.expectedHeadSha,
+                    operationResult: resolution.operationResult
+                };
+                validateBranchDeployConfiguration(branchDeployConfiguration);
+            }
+            core.setOutput('branch_deploy_reconciled', 'true');
+        }
+        if (prNumber === null) {
+            throw new Error('pull request number could not be resolved');
+        }
+        core.info(`🔍 Evaluating PR #${prNumber}`);
+        const statusResult = await dependencies.status(client, context, prNumber, {
             checks: inputs.checks,
             excludeChecks: inputs.excludeChecks,
             currentCheckName: inputs.currentCheckName
@@ -1368,11 +1742,11 @@ async function run(dependencies = defaultDependencies) {
         let labelActions;
         let currentLabels;
         if (inputs.mode === 'branch-deploy') {
-            const branchDeploy = inputs.branchDeploy;
+            const branchDeploy = branchDeployConfiguration;
             currentLabels = await client.listIssueLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                number: inputs.prNumber
+                number: prNumber
             });
             const decision = dependencies.determineBranchDeployState({
                 configuration: branchDeploy,
@@ -1397,11 +1771,11 @@ async function run(dependencies = defaultDependencies) {
             labelActions = dependencies.determineLabelActions(passed, inputs.passLabels, inputs.failLabels, inputs.passLabelsCleanup);
         }
         logLabelActions(labelActions.labelsToAdd, labelActions.labelsToRemove, core);
-        if (inputs.branchDeploy?.dryRun === true) {
+        if (branchDeployConfiguration?.dryRun === true) {
             core.info('🏷️ Dry run enabled; branch-deploy labels were not changed');
         }
         else {
-            await dependencies.label(inputs.prNumber, context, client, labelActions.labelsToAdd, labelActions.labelsToRemove, currentLabels === undefined ? { core } : { core, currentLabels });
+            await dependencies.label(prNumber, context, client, labelActions.labelsToAdd, labelActions.labelsToRemove, currentLabels === undefined ? { core } : { core, currentLabels });
         }
         core.info('✅ PR Status Action completed successfully');
         return 'success';

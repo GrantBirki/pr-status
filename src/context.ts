@@ -8,6 +8,8 @@ export interface RepositoryContext {
 export interface ActionContext {
   repo: RepositoryContext
   job: string
+  eventName: string
+  eventPayload: Record<string, unknown>
   issueNumber: number | undefined
 }
 
@@ -83,6 +85,7 @@ export function loadActionContext(
   }
 
   const eventPath = requiredEnvironmentValue(environment, 'GITHUB_EVENT_PATH')
+  const eventName = requiredEnvironmentValue(environment, 'GITHUB_EVENT_NAME')
   const job = requiredEnvironmentValue(environment, 'GITHUB_JOB')
   const payload = parseEventPayload(dependencies.readFile(eventPath))
   const issueNumber =
@@ -96,6 +99,8 @@ export function loadActionContext(
       repo
     },
     job,
+    eventName,
+    eventPayload: payload,
     issueNumber
   }
 }

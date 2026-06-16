@@ -938,6 +938,211 @@ test('paginates issue labels and encodes every user-controlled path segment', as
   assert.equal(recording.calls[0]!.init.method, 'GET')
 })
 
+test('paginates issue comments since an operation started', async () => {
+  const since = '2026-01-02T03:04:05.000Z'
+  const next =
+    'https://api.github.com/repos/octo%20cat/exam%2Fple/issues/42/comments?since=2026-01-02T03%3A04%3A05.000Z&per_page=100&page=2'
+  const first = {
+    id: 1,
+    body: 'first',
+    user: {login: 'github-actions[bot]', type: 'Bot'}
+  }
+  const second = {
+    id: 2,
+    body: 'second',
+    user: null
+  }
+  const recording = createSequenceFetch([
+    () => jsonResponse([first], 200, {Link: `<${next}>; rel="next"`}),
+    () => jsonResponse([second])
+  ])
+
+  const result = await createClient(recording.fetch).listIssueComments({
+    owner: 'octo cat',
+    repo: 'exam/ple',
+    number: 42,
+    since
+  })
+
+  assert.deepEqual(result, [first, second])
+  assert.deepEqual(
+    recording.calls.map(call => call.url),
+    [
+      'https://api.github.com/repos/octo%20cat/exam%2Fple/issues/42/comments?since=2026-01-02T03%3A04%3A05.000Z&per_page=100&page=1',
+      next
+    ]
+  )
+})
+
+test('lists all issue comments when no timestamp filter is provided', async () => {
+  const recording = createSequenceFetch([() => jsonResponse([])])
+
+  assert.deepEqual(
+    await createClient(recording.fetch).listIssueComments(request),
+    []
+  )
+  assert.equal(
+    recording.calls[0]!.url,
+    'https://api.github.com/repos/octocat/example/issues/42/comments?per_page=100&page=1'
+  )
+})
+
+test('gets an exact issue comment with pull request ownership data', async () => {
+  const response = {
+    id: 600,
+    body: '<!-- branch-deploy-status:{} -->',
+    user: {login: 'github-actions[bot]', type: 'Bot'},
+    issue_url: 'https://api.github.com/repos/octocat/example/issues/42'
+  }
+  const recording = createSequenceFetch([() => jsonResponse(response)])
+
+  assert.deepEqual(
+    await createClient(recording.fetch).getIssueComment({
+      owner: 'octocat',
+      repo: 'example',
+      commentId: 600
+    }),
+    {
+      id: response.id,
+      body: response.body,
+      user: response.user,
+      issueUrl: response.issue_url
+    }
+  )
+  assert.equal(
+    recording.calls[0]!.url,
+    'https://api.github.com/repos/octocat/example/issues/comments/600'
+  )
+  assert.equal(recording.calls[0]!.init.method, 'GET')
+})
+
+test('rejects invalid exact issue comment requests and ownership data', async () => {
+  const noFetch: FetchImplementation = async () => {
+    assert.fail('fetch must not be called')
+  }
+  for (const commentId of [0, 1.5]) {
+    await assert.rejects(
+      createClient(noFetch).getIssueComment({
+        owner: 'octocat',
+        repo: 'example',
+        commentId
+      }),
+      /comment ID must be a positive safe integer/u
+    )
+  }
+
+  const malformed = createSequenceFetch([
+    () =>
+      jsonResponse({
+        id: 600,
+        body: 'marker',
+        user: null,
+        issue_url: null
+      })
+  ])
+  await assert.rejects(
+    createClient(malformed.fetch).getIssueComment({
+      owner: 'octocat',
+      repo: 'example',
+      commentId: 600
+    }),
+    /issue comment\.issue_url must be a string/u
+  )
+})
+
+test('rejects malformed issue comment responses and empty timestamps', async () => {
+  const fixtures: Array<{value: unknown; message: RegExp}> = [
+    {value: {}, message: /issue comments must be an array/u},
+    {value: [null], message: /issue comments\[0\] must be an object/u},
+    {
+      value: [{id: 0, body: 'x', user: {login: 'x', type: 'User'}}],
+      message: /id must be a positive safe integer/u
+    },
+    {
+      value: [{id: 1, body: null, user: {login: 'x', type: 'User'}}],
+      message: /body must be a string/u
+    },
+    {
+      value: [{id: 1, body: 'x', user: []}],
+      message: /user must be an object/u
+    },
+    {
+      value: [{id: 1, body: 'x', user: {login: null, type: 'User'}}],
+      message: /user\.login must be a string/u
+    },
+    {
+      value: [{id: 1, body: 'x', user: {login: 'x', type: null}}],
+      message: /user\.type must be a string/u
+    }
+  ]
+
+  for (const fixture of fixtures) {
+    const recording = createSequenceFetch([() => jsonResponse(fixture.value)])
+    await assert.rejects(
+      createClient(recording.fetch).listIssueComments({
+        ...request,
+        since: '2026-01-02T03:04:05.000Z'
+      }),
+      fixture.message
+    )
+  }
+
+  const fetch: FetchImplementation = async () => {
+    assert.fail('fetch must not be called')
+  }
+  await assert.rejects(
+    createClient(fetch).listIssueComments({...request, since: ''}),
+    /since timestamp must not be empty/u
+  )
+})
+
+test('enforces issue comment pagination page, repeat, and node caps', async () => {
+  const commentsPath = '/repos/octocat/example/issues/42/comments'
+  const firstPage = `https://api.github.com${commentsPath}?page=1`
+  const repeated = createSequenceFetch([
+    () => jsonResponse([], 200, {Link: `<${firstPage}>; rel="next"`})
+  ])
+  await assert.rejects(
+    createClient(repeated.fetch).listIssueComments({
+      ...request,
+      since: '2026-01-02T03:04:05.000Z'
+    }),
+    /issue comments pagination repeated a page/u
+  )
+
+  let pages = 0
+  const pageLimitFetch: FetchImplementation = async () => {
+    pages += 1
+    return jsonResponse([], 200, {
+      Link: `<https://api.github.com${commentsPath}?page=${pages + 1}>; rel="next"`
+    })
+  }
+  await assert.rejects(
+    createClient(pageLimitFetch).listIssueComments({
+      ...request,
+      since: '2026-01-02T03:04:05.000Z'
+    }),
+    /issue comments pagination exceeded 100 pages/u
+  )
+  assert.equal(pages, 100)
+
+  const comment = {
+    id: 1,
+    body: 'x',
+    user: {login: 'github-actions[bot]', type: 'Bot'}
+  }
+  const nodeLimit = createSequenceFetch([
+    () => jsonResponse(Array.from({length: 10_001}, () => comment))
+  ])
+  await assert.rejects(
+    createClient(nodeLimit.fetch).listIssueComments({
+      ...request,
+      since: '2026-01-02T03:04:05.000Z'
+    }),
+    /issue comments pagination exceeded 10,000 nodes/u
+  )
+})
+
 test('ignores Link headers that do not advertise another page', async () => {
   const recording = createSequenceFetch([
     () =>

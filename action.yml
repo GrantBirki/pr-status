@@ -18,9 +18,9 @@ inputs:
     default: ${{ github.job }}
     required: false
   pr_number:
-    description: A positive integer identifying the pull request to evaluate
-    default: ${{ github.event.number }}
-    required: true
+    description: A positive integer identifying the pull request to evaluate; branch-deploy mode resolves supported events when omitted
+    default: ''
+    required: false
   checks:
     description: Exactly `required` or `all`, selecting which CI checks to evaluate
     default: all
@@ -46,7 +46,7 @@ inputs:
     default: ''
     required: false
   transition:
-    description: In branch-deploy mode, exactly `reset`, `review`, `noop`, `deploy`, or `clear`
+    description: In branch-deploy mode, exactly `reset`, `review`, `noop`, `deploy`, or `clear`; omit to resolve a supported GitHub event
     default: ''
     required: false
   expected_head_sha:
@@ -86,6 +86,8 @@ inputs:
     default: 'false'
     required: false
 outputs:
+  branch_deploy_reconciled:
+    description: 'In branch-deploy mode, true when the event was reconciled and false when it was intentionally ignored'
   branch_deploy_state:
     description: 'In branch-deploy mode, the converged state: cleared, noop, review, deploy, or merge'
   head_sha:

@@ -118,6 +118,26 @@ export interface PullRequestRequest {
   number: number
 }
 
+export interface IssueCommentsRequest extends PullRequestRequest {
+  since?: string
+}
+
+export interface IssueCommentRequest {
+  owner: string
+  repo: string
+  commentId: number
+}
+
+export interface GitHubIssueComment {
+  id: number
+  body: string
+  user: {login: string; type: string} | null
+}
+
+export interface GitHubIssueCommentDetails extends GitHubIssueComment {
+  issueUrl: string
+}
+
 export interface RemoveLabelRequest extends PullRequestRequest {
   name: string
 }
@@ -128,6 +148,12 @@ export interface AddLabelsRequest extends PullRequestRequest {
 
 export interface GitHubClient {
   getPullRequestStatus(request: PullRequestRequest): Promise<PullRequestStatus>
+  getIssueComment(
+    request: IssueCommentRequest
+  ): Promise<GitHubIssueCommentDetails>
+  listIssueComments(
+    request: IssueCommentsRequest
+  ): Promise<GitHubIssueComment[]>
   listIssueLabels(request: PullRequestRequest): Promise<string[]>
   removeLabel(request: RemoveLabelRequest): Promise<void>
   addLabels(request: AddLabelsRequest): Promise<void>
@@ -530,6 +556,37 @@ function parseLabelNames(value: unknown, path: string): string[] {
   })
 }
 
+function parseIssueComment(value: unknown, path: string): GitHubIssueComment {
+  const comment = requireRecord(value, path)
+  const id = comment.id
+  if (!Number.isSafeInteger(id) || (id as number) <= 0) {
+    throw new Error(
+      `Malformed GitHub response: ${path}.id must be a positive safe integer`
+    )
+  }
+  const user =
+    comment.user === null
+      ? null
+      : requireRecord(comment.user, `${path}.user`)
+  return {
+    id: id as number,
+    body: requireString(comment.body, `${path}.body`),
+    user:
+      user === null
+        ? null
+        : {
+            login: requireString(user.login, `${path}.user.login`),
+            type: requireString(user.type, `${path}.user.type`)
+          }
+  }
+}
+
+function parseIssueComments(value: unknown): GitHubIssueComment[] {
+  return requireArray(value, 'issue comments').map((comment, index) =>
+    parseIssueComment(comment, `issue comments[${index}]`)
+  )
+}
+
 function createPaginationState(): PaginationState {
   return {
     active: true,
@@ -619,10 +676,14 @@ function requireGitHubRestUrl(
   return {url: url.toString(), page}
 }
 
-function validateRequest(request: PullRequestRequest): void {
+function validateRepositoryRequest(request: {owner: string; repo: string}): void {
   if (request.owner.length === 0 || request.repo.length === 0) {
     throw new Error('GitHub repository owner and name must not be empty')
   }
+}
+
+function validateRequest(request: PullRequestRequest): void {
+  validateRepositoryRequest(request)
   if (!Number.isSafeInteger(request.number) || request.number <= 0) {
     throw new Error('GitHub pull request number must be a positive safe integer')
   }
@@ -791,6 +852,82 @@ export function createGitHubClient(
     }
   }
 
+  async function listIssueComments(
+    commentsRequest: IssueCommentsRequest
+  ): Promise<GitHubIssueComment[]> {
+    validateRequest(commentsRequest)
+    if (commentsRequest.since === '') {
+      throw new Error('GitHub issue comments since timestamp must not be empty')
+    }
+    const path = `/repos/${encodeURIComponent(commentsRequest.owner)}/${encodeURIComponent(commentsRequest.repo)}/issues/${commentsRequest.number}/comments`
+    const since =
+      commentsRequest.since === undefined
+        ? ''
+        : `since=${encodeURIComponent(commentsRequest.since)}&`
+    let url = `${REST_API_URL}${path}?${since}per_page=100&page=1`
+    const seenPages = new Set<string>(['1'])
+    const comments: GitHubIssueComment[] = []
+    let pages = 0
+
+    while (true) {
+      pages += 1
+      const response = await request('GET', url)
+      const parsedJson = parseJson(
+        response.body,
+        'issue comments response',
+        token
+      )
+      comments.push(...parseIssueComments(parsedJson))
+      if (comments.length > MAX_NODES) {
+        throw new Error(
+          'GitHub issue comments pagination exceeded 10,000 nodes'
+        )
+      }
+
+      const link = nextLink(response.headers.get('link'))
+      if (link === null) {
+        return comments
+      }
+      if (pages >= MAX_PAGES) {
+        throw new Error(
+          'GitHub issue comments pagination exceeded 100 pages'
+        )
+      }
+
+      const validatedLink = requireGitHubRestUrl(link, path)
+      if (seenPages.has(validatedLink.page)) {
+        throw new Error('GitHub issue comments pagination repeated a page')
+      }
+      seenPages.add(validatedLink.page)
+      url = validatedLink.url
+    }
+  }
+
+  async function getIssueComment(
+    commentRequest: IssueCommentRequest
+  ): Promise<GitHubIssueCommentDetails> {
+    validateRepositoryRequest(commentRequest)
+    if (
+      !Number.isSafeInteger(commentRequest.commentId) ||
+      commentRequest.commentId <= 0
+    ) {
+      throw new Error('GitHub issue comment ID must be a positive safe integer')
+    }
+    const url = `${REST_API_URL}/repos/${encodeURIComponent(commentRequest.owner)}/${encodeURIComponent(commentRequest.repo)}/issues/comments/${commentRequest.commentId}`
+    const response = await request('GET', url)
+    const parsedJson = parseJson(
+      response.body,
+      'issue comment response',
+      token
+    )
+    const comment = parseIssueComment(parsedJson, 'issue comment')
+    const record = requireRecord(parsedJson, 'issue comment')
+    return {
+      ...comment,
+      issueUrl: requireString(record.issue_url, 'issue comment.issue_url')
+    }
+  }
+
   async function removeLabel(labelRequest: RemoveLabelRequest): Promise<void> {
     validateRequest(labelRequest)
     const url = `${REST_API_URL}/repos/${encodeURIComponent(labelRequest.owner)}/${encodeURIComponent(labelRequest.repo)}/issues/${labelRequest.number}/labels/${encodeURIComponent(labelRequest.name)}`
@@ -813,5 +950,12 @@ export function createGitHubClient(
     parseLabelNames(parsedJson, 'labels')
   }
 
-  return {getPullRequestStatus, listIssueLabels, removeLabel, addLabels}
+  return {
+    getPullRequestStatus,
+    getIssueComment,
+    listIssueComments,
+    listIssueLabels,
+    removeLabel,
+    addLabels
+  }
 }

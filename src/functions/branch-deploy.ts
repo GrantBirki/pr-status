@@ -31,14 +31,17 @@ export interface BranchDeployLabels {
   merge: string
 }
 
-export interface BranchDeployConfiguration {
-  transition: BranchDeployTransition
-  expectedHeadSha: string
-  operationResult: OperationResult | null
+export interface BranchDeployPolicy {
   labels: BranchDeployLabels
   clearOnDraft: boolean
   demoteMergeOnReviewFailure: boolean
   dryRun: boolean
+}
+
+export interface BranchDeployConfiguration extends BranchDeployPolicy {
+  transition: BranchDeployTransition
+  expectedHeadSha: string
+  operationResult: OperationResult | null
 }
 
 export interface BranchDeployPullRequest {
@@ -113,13 +116,7 @@ export function parseBooleanInput(name: string, value: string): boolean {
 export function validateBranchDeployConfiguration(
   configuration: BranchDeployConfiguration
 ): void {
-  const labels = Object.values(configuration.labels)
-  if (labels.some(label => label.trim() === '')) {
-    throw new Error('branch-deploy labels must not be empty')
-  }
-  if (new Set(labels.map(labelKey)).size !== labels.length) {
-    throw new Error('branch-deploy labels must be distinct')
-  }
+  validateBranchDeployPolicy(configuration)
 
   const headBoundTransition =
     configuration.transition === 'reset' ||
@@ -129,6 +126,18 @@ export function validateBranchDeployConfiguration(
     throw new Error(
       'expected_head_sha is required for reset, noop, and deploy transitions'
     )
+  }
+}
+
+export function validateBranchDeployPolicy(
+  policy: BranchDeployPolicy
+): void {
+  const labels = Object.values(policy.labels)
+  if (labels.some(label => label.trim() === '')) {
+    throw new Error('branch-deploy labels must not be empty')
+  }
+  if (new Set(labels.map(labelKey)).size !== labels.length) {
+    throw new Error('branch-deploy labels must be distinct')
   }
 }
 

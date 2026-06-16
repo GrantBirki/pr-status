@@ -68,7 +68,14 @@ jobs:
       statuses: read
     uses: ./.github/workflows/branch-deploy-status.yml
     with:
-      transition: reset
-      pr_number: ${{ github.event.pull_request.number }}
-      expected_head_sha: ${{ github.event.pull_request.head.sha }}
       dry_run: true
+
+  verify-branch-deploy-status-dry-run:
+    name: verify native branch-deploy-status dry run
+    needs: branch-deploy-status-dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - name: verify event reconciliation
+        env:
+          RECONCILED: ${{ needs.branch-deploy-status-dry-run.outputs.branch_deploy_reconciled }}
+        run: test "${RECONCILED}" = "true"

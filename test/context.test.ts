@@ -24,6 +24,7 @@ function dependencies(
 
 const baseEnvironment: NodeJS.ProcessEnv = {
   GITHUB_ACTIONS: 'true',
+  GITHUB_EVENT_NAME: 'pull_request',
   GITHUB_EVENT_PATH: '/event.json',
   GITHUB_JOB: 'evaluate',
   GITHUB_REPOSITORY: 'octocat/example',
@@ -44,6 +45,12 @@ test('loads repository, job, and pull request context without a workflow name', 
     {
       repo: {owner: 'octocat', repo: 'example'},
       job: 'evaluate',
+      eventName: 'pull_request',
+      eventPayload: {
+        number: 3,
+        issue: {number: 2},
+        pull_request: {number: 1}
+      },
       issueNumber: 1
     }
   )
@@ -82,6 +89,7 @@ test('rejects execution outside GitHub Actions', () => {
 test('requires GitHub Actions context variables', () => {
   for (const name of [
     'GITHUB_REPOSITORY',
+    'GITHUB_EVENT_NAME',
     'GITHUB_EVENT_PATH',
     'GITHUB_JOB'
   ]) {
@@ -121,6 +129,7 @@ test('default context dependencies read the GitHub event file', async () => {
   const eventPath = join(temporaryRoot, 'event.json')
   const names = [
     'GITHUB_ACTIONS',
+    'GITHUB_EVENT_NAME',
     'GITHUB_EVENT_PATH',
     'GITHUB_JOB',
     'GITHUB_REPOSITORY',
@@ -131,6 +140,7 @@ test('default context dependencies read the GitHub event file', async () => {
 
   await writeFile(eventPath, JSON.stringify({pull_request: {number: 42}}))
   process.env.GITHUB_ACTIONS = 'true'
+  process.env.GITHUB_EVENT_NAME = 'pull_request'
   process.env.GITHUB_EVENT_PATH = eventPath
   process.env.GITHUB_JOB = 'evaluate'
   process.env.GITHUB_REPOSITORY = 'octocat/example'
@@ -139,6 +149,8 @@ test('default context dependencies read the GitHub event file', async () => {
     assert.deepEqual(loadActionContext(), {
       repo: {owner: 'octocat', repo: 'example'},
       job: 'evaluate',
+      eventName: 'pull_request',
+      eventPayload: {pull_request: {number: 42}},
       issueNumber: 42
     })
   } finally {
