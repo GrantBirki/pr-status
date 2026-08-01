@@ -32,8 +32,8 @@
   "license": "MIT",
   "dependencies": {},
   "devDependencies": {
-    "@types/node": "24.12.2",
-    "@vercel/ncc": "0.38.4",
+    "@types/node": "25.9.3",
+    "@vercel/ncc": "0.44.0",
     "typescript": "6.0.3"
   }
 }
