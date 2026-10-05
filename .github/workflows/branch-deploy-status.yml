@@ -116,6 +116,8 @@ on:
         description: Whether the pull request is a draft
         value: ${{ jobs.status.outputs.is_draft }}
 
+cache-mode: none
+
 jobs:
   status:
     name: branch-deploy-status

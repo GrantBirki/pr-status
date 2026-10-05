@@ -9,6 +9,8 @@ permissions:
   pull-requests: read
   statuses: read
 
+cache-mode: none
+
 jobs:
   acceptance:
     runs-on: ubuntu-latest
